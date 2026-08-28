@@ -1,3 +1,34 @@
+> **Estate fork — maintained.**
+>
+> This is `chmjdev/vrsplat`, a maintained fork of
+> [ninjamode/Unity-VR-Gaussian-Splatting](https://github.com/ninjamode/Unity-VR-Gaussian-Splatting),
+> which is itself built on
+> [aras-p/UnityGaussianSplatting](https://github.com/aras-p/UnityGaussianSplatting)
+> by Aras Pranckevičius. **MIT throughout — original copyright and licence
+> preserved unchanged** (see `LICENSE.md`); this fork adds no licence terms.
+>
+> **Why it exists.** The Interactive suite renders real captured training
+> rooms as Gaussian splats on Quest 3 standalone. Both upstreams describe
+> themselves as experimental, and the canonical project states it is "not
+> tested at all on mobile/web". Rather than depend on that unmaintained,
+> we maintain this fork and carry the fixes ourselves.
+>
+> **Verified here, not assumed:**
+> - Compiles and passes the consuming project's suite on **Unity 6000.3.22f1**
+>   (both upstreams declare Unity 2022.3), URP, Android/OpenXR target.
+> - Renderer type resolves as
+>   `GaussianSplatting.Runtime.GaussianSplatRenderer, GaussianSplatting` —
+>   note the assembly is `GaussianSplatting`, not `...Runtime`.
+> - Budget on device: upstream reports ~72fps to roughly **400k Gaussians**
+>   on Quest 3. Room-sized captures are realistic; a whole building is not.
+>
+> **Consumed by** `Interactive/unityvrlabs` via
+> `"org.nesnausk.gaussian-splatting": "file:../../vrsplat/package"` — the
+> suite keeps its repos side by side, the same assumption openvrlabs' sync
+> already makes. `upstream` remote is wired for pulling fixes back down.
+
+---
+
 # Gaussian Splatting Virtual Reality rendering package for Unity
 
 This rendering package enables Virtual Reality (VR) display of Gaussian Splatting (GS) point clouds. It builds on the rendering package created by Aras Pranckevičius to display Gaussian Splats in Unity; see https://github.com/aras-p/UnityGaussianSplatting. This rendering package is part of a publication for displaying CT scans as a GS cloud in VR, but should work with any data. See https://ieeexplore.ieee.org/document/10919012
