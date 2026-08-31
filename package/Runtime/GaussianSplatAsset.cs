@@ -3,9 +3,12 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Mathematics;
+#if UNITY_EDITOR
 using UnityEditor;
+#endif
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Serialization;
@@ -256,12 +259,74 @@ namespace GaussianSplatting.Runtime
 
         public List<LayerAssets> LayerData => m_layerData;
         public TextAsset ClusteredSHData => m_clusteredSHData;
-        public long posDataSize => m_layerData.Sum(layer => layer.m_PosData.dataSize);
-        public long colorDataSize => m_layerData.Sum(layer => layer.m_ColorData.dataSize);
-        public long otherDataSize => m_layerData.Sum(layer => layer.m_OtherData.dataSize);
-        public long shDataSize => m_clusteredSHData != null ? m_clusteredSHData.dataSize : m_layerData.Sum(layer => layer.m_SHData.dataSize);
-        public long chunkDataSize => m_layerData.Sum(layer => layer.m_ChunkData != null ? layer.m_ChunkData.dataSize : 0);
+        public long posDataSize => HasRuntimeData ? m_RuntimeLayerData.Sum(l => (long)l.posData.Length) : m_layerData.Sum(layer => layer.m_PosData.dataSize);
+        public long colorDataSize => HasRuntimeData ? m_RuntimeLayerData.Sum(l => (long)l.colorData.Length) : m_layerData.Sum(layer => layer.m_ColorData.dataSize);
+        public long otherDataSize => HasRuntimeData ? m_RuntimeLayerData.Sum(l => (long)l.otherData.Length) : m_layerData.Sum(layer => layer.m_OtherData.dataSize);
+        public long shDataSize => HasRuntimeData ? m_RuntimeLayerData.Sum(l => l.shData.IsCreated ? (long)l.shData.Length : 0) : (m_clusteredSHData != null ? m_clusteredSHData.dataSize : m_layerData.Sum(layer => layer.m_SHData.dataSize));
+        public long chunkDataSize => HasRuntimeData ? m_RuntimeLayerData.Sum(l => l.chunkData.IsCreated ? (long)l.chunkData.Length : 0) : m_layerData.Sum(layer => layer.m_ChunkData != null ? layer.m_ChunkData.dataSize : 0);
         public CameraInfo[] cameras => m_Cameras;
+
+        // ------------------------------------------------------------------
+        // Estate fork (chmjdev/vrsplat): runtime-created splat data.
+        //
+        // The serialized path above stores splat data in TextAsset blobs,
+        // which only the Editor importer can create — so a player (desktop
+        // studio, Quest headset) could never load a PLY that arrives after
+        // the build. These parallel NativeArray-backed layers let runtime
+        // code construct a fully valid asset from raw bytes. The renderer
+        // prefers them when present; nothing about the serialized path
+        // changes. Arrays are owned by the asset once handed over:
+        // DisposeRuntimeData releases them, and callers must not dispose.
+        // ------------------------------------------------------------------
+        public struct RuntimeLayerData
+        {
+            public byte layer;
+            public NativeArray<byte> chunkData; // optional: !IsCreated when the format has no chunks
+            public NativeArray<byte> posData;
+            public NativeArray<byte> otherData;
+            public NativeArray<byte> colorData;
+            public NativeArray<byte> shData;    // optional when clustered SH is used (not supported at runtime yet)
+        }
+
+        [NonSerialized] List<RuntimeLayerData> m_RuntimeLayerData;
+
+        public bool HasRuntimeData => m_RuntimeLayerData != null && m_RuntimeLayerData.Count > 0;
+        public IReadOnlyList<RuntimeLayerData> RuntimeLayers => m_RuntimeLayerData;
+
+        public void SetRuntimeData(byte layer, NativeArray<byte> chunkData, NativeArray<byte> posData,
+            NativeArray<byte> otherData, NativeArray<byte> colorData, NativeArray<byte> shData)
+        {
+            m_RuntimeLayerData ??= new List<RuntimeLayerData>();
+            m_RuntimeLayerData.Add(new RuntimeLayerData
+            {
+                layer = layer,
+                chunkData = chunkData,
+                posData = posData,
+                otherData = otherData,
+                colorData = colorData,
+                shData = shData,
+            });
+        }
+
+        public void DisposeRuntimeData()
+        {
+            if (m_RuntimeLayerData == null)
+                return;
+            foreach (var l in m_RuntimeLayerData)
+            {
+                if (l.chunkData.IsCreated) l.chunkData.Dispose();
+                if (l.posData.IsCreated) l.posData.Dispose();
+                if (l.otherData.IsCreated) l.otherData.Dispose();
+                if (l.colorData.IsCreated) l.colorData.Dispose();
+                if (l.shData.IsCreated) l.shData.Dispose();
+            }
+            m_RuntimeLayerData = null;
+        }
+
+        void OnDestroy()
+        {
+            DisposeRuntimeData();
+        }
 
         public struct ChunkInfo
         {

@@ -435,7 +435,22 @@ namespace GaussianSplatting.Runtime
             int chunkSize, chunkMarker;
             posSize = posMarker = otherSize = otherMarker = shSize = shMarker = colorSize = colorMarker = chunkSize = chunkMarker = 0;
             
-            foreach (var layerAssets in asset.LayerData.Where(l => activeLayers.Contains(l.layer)))
+            // Estate fork: a runtime-created asset carries NativeArray layers
+            // instead of TextAsset blobs — same bytes, same downstream path.
+            bool useRuntimeData = asset.HasRuntimeData;
+
+            if (useRuntimeData)
+            {
+                foreach (var l in asset.RuntimeLayers.Where(l => activeLayers.Contains(l.layer)))
+                {
+                    posSize += l.posData.Length;
+                    otherSize += l.otherData.Length;
+                    shSize += l.shData.IsCreated ? l.shData.Length : 0;
+                    colorSize += l.colorData.Length;
+                    chunkSize += l.chunkData.IsCreated ? l.chunkData.Length : 0;
+                }
+            }
+            else foreach (var layerAssets in asset.LayerData.Where(l => activeLayers.Contains(l.layer)))
             {
                 posSize += (int) layerAssets.m_PosData.dataSize;
                 otherSize += (int) layerAssets.m_OtherData.dataSize;
@@ -450,18 +465,44 @@ namespace GaussianSplatting.Runtime
             var colorDataArr = new NativeArray<byte>(colorSize, Allocator.TempJob);
             var chunkDataArr = new NativeArray<byte>(chunkSize, Allocator.Temp);
             
-            foreach (var layerAssets in asset.LayerData.Where(l => activeLayers.Contains(l.layer)))
+            if (useRuntimeData)
+            {
+                foreach (var l in asset.RuntimeLayers.Where(l => activeLayers.Contains(l.layer)))
+                {
+                    posDataArr.GetSubArray(posMarker, l.posData.Length).CopyFrom(l.posData);
+                    posMarker += l.posData.Length;
+
+                    otherDataArr.GetSubArray(otherMarker, l.otherData.Length).CopyFrom(l.otherData);
+                    otherMarker += l.otherData.Length;
+
+                    colorDataArr.GetSubArray(colorMarker, l.colorData.Length).CopyFrom(l.colorData);
+                    colorMarker += l.colorData.Length;
+
+                    if (l.shData.IsCreated)
+                    {
+                        shDataArr.GetSubArray(shMarker, l.shData.Length).CopyFrom(l.shData);
+                        shMarker += l.shData.Length;
+                    }
+
+                    if (l.chunkData.IsCreated)
+                    {
+                        chunkDataArr.GetSubArray(chunkMarker, l.chunkData.Length).CopyFrom(l.chunkData);
+                        chunkMarker += l.chunkData.Length;
+                    }
+                }
+            }
+            else foreach (var layerAssets in asset.LayerData.Where(l => activeLayers.Contains(l.layer)))
             {
                 var posAssetData = layerAssets.m_PosData.GetData<byte>();
                 var posSub = posDataArr.GetSubArray(posMarker, posAssetData.Length);
                 posMarker += posAssetData.Length;
                 posSub.CopyFrom(posAssetData);
-                
+
                 var otherAssetData = layerAssets.m_OtherData.GetData<byte>();
                 var otherSub = otherDataArr.GetSubArray(otherMarker, otherAssetData.Length);
                 otherMarker += otherAssetData.Length;
                 otherSub.CopyFrom(otherAssetData);
-                
+
                 var colorAssetData = layerAssets.m_ColorData.GetData<byte>();
                 var colorSub = colorDataArr.GetSubArray(colorMarker, colorAssetData.Length);
                 colorMarker += colorAssetData.Length;

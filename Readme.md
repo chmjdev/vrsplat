@@ -22,10 +22,16 @@
 > - Budget on device: upstream reports ~72fps to roughly **400k Gaussians**
 >   on Quest 3. Room-sized captures are realistic; a whole building is not.
 >
-> **Consumed by** `Interactive/unityvrlabs` via
-> `"org.nesnausk.gaussian-splatting": "file:../../vrsplat/package"` — the
+> **Consumed by** `Interactive/unityvrlabs` **and** `Interactive/vrsimulator`
+> via `"org.nesnausk.gaussian-splatting": "file:../../vrsplat/package"` — the
 > suite keeps its repos side by side, the same assumption openvrlabs' sync
 > already makes. `upstream` remote is wired for pulling fixes back down.
+>
+> **Fork additions (2026-08-31, for vrsimulator):** runtime-created splat
+> data (`GaussianSplatAsset.SetRuntimeData` — load a PLY in a *player*, no
+> Editor importer needed), and `#if UNITY_EDITOR` guards on the Runtime
+> assembly's four bare `using UnityEditor;` lines, which previously broke
+> every player build that included this package. See `ROADMAP.md` item 1b.
 
 ---
 

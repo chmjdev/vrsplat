@@ -35,6 +35,31 @@ right preset for the Quest budget.
    guidance is in the warning text: crop with cutouts, trim with the edit
    tools, export modified PLY, re-import at `VeryLow`.
 
+1b. **Runtime PLY loading + player-build fitness. — DONE 2026-08-31**
+   Two additions, made for `Interactive/vrsimulator` (whose studio and
+   Quest player must load a capture with no Editor in sight), both additive:
+   - `GaussianSplatAsset.SetRuntimeData(...)` / `DisposeRuntimeData()` —
+     NativeArray-backed layers parallel to the serialized TextAsset ones;
+     `GaussianSplatRenderer.UpdateRessources` prefers them when present.
+     The size properties (`posDataSize` …) account for both sources, so
+     `HasValidAsset` holds for runtime-created assets. Packing rules the
+     caller must follow are documented in vrsimulator's `SplatPly.cs`
+     (Float32 pos/scale, Norm10 quat, raw float4 colour, Float16 SH table).
+   - The four bare `using UnityEditor;` lines in Runtime files are now
+     `#if UNITY_EDITOR`-guarded. They compiled in the editor and in
+     EditMode suites while making every **player** build of a consuming
+     project fail — the actual Editor API *usages* were already guarded,
+     only the usings were not.
+
+1c. **RenderGraph port of `GaussianSplatURPFeature`.**
+   Unity 6 URP runs RenderGraph by default and the feature's `GSRenderPass`
+   only implements the legacy `Execute` path, so it silently draws nothing
+   there — the player log says exactly this (observed in vrsimulator's
+   first smoke run, 2026-08-31). vrsimulator ships with URP **Compatibility
+   Mode (RenderGraph disabled)** as the workaround; the real fix is
+   implementing `RecordRenderGraph` (upstream aras-p has since done this —
+   candidate for pulling down via the `upstream` remote).
+
 2. **SOG / compressed-format import.**
    PlayCanvas' SOG format reports 15–20× smaller than PLY. It is
    web-oriented, so this is real importer work rather than a flag, but the
