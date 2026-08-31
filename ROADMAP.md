@@ -51,6 +51,20 @@ right preset for the Quest budget.
      project fail — the actual Editor API *usages* were already guarded,
      only the usings were not.
 
+1d. **Vulkan/Quest draw bindings. — DONE 2026-08-31**
+   On Quest's Vulkan backend (the splat shader compiles through DXC), the
+   structured/byte-address buffers the DRAW shader reads never arrived when
+   bound via MaterialPropertyBlock — the driver logged `Shader requires a
+   compute buffer "_SplatPos", but none provided. Skipping draw calls` for
+   every source buffer and the room rendered as nothing, while Metal
+   tolerated the identical path (first observed on a Quest 3S the day the
+   first consumer APK ran). Mirroring the bindings onto the per-renderer
+   material did not help either. The fix: `BindDrawGlobals` — every
+   parameter the draw reads is also bound as a command-buffer GLOBAL, in
+   draw order, immediately before its `DrawProcedural` (the same mechanism
+   the compute side has always relied on). The MPB stays and wins wherever
+   the backend honours it, with identical values.
+
 1c. **RenderGraph port of `GaussianSplatURPFeature`.**
    Unity 6 URP runs RenderGraph by default and the feature's `GSRenderPass`
    only implements the legacy `Execute` path, so it silently draws nothing

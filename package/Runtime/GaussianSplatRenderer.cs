@@ -151,6 +151,32 @@ namespace GaussianSplatting.Runtime
                 mpb.SetBuffer(GaussianSplatRenderer.Props.SplatViewData, gs.m_GpuView);
 
                 mpb.SetBuffer(GaussianSplatRenderer.Props.OrderBuffer, gs.m_GpuSortKeys);
+
+                // Estate fork: on Quest's Vulkan backend (DXC-compiled splat
+                // shader), structured/byte-address buffers bound through the
+                // MaterialPropertyBlock — and even mirrored onto the material —
+                // intermittently never reach the DrawProcedural call: the
+                // driver logs "Shader requires a compute buffer X, but none
+                // provided. Skipping draw calls" and the splats vanish
+                // (observed on Quest 3S, 2026-08-31; Metal tolerates the same
+                // path, which hid it on desktop). Command-buffer GLOBAL
+                // bindings are honoured reliably on every backend — the
+                // compute side of this very file already depends on that — so
+                // every parameter the draw reads is also bound globally, in
+                // draw order, immediately before its draw. The MPB stays: where
+                // it works it wins with identical values.
+                gs.SetAssetDataOnMaterial(displayMat);
+                gs.BindDrawGlobals(cmb);
+                cmb.SetGlobalBuffer(GaussianSplatRenderer.Props.SplatChunks, gs.m_GpuChunks);
+                cmb.SetGlobalBuffer(GaussianSplatRenderer.Props.SplatViewData, gs.m_GpuView);
+                cmb.SetGlobalBuffer(GaussianSplatRenderer.Props.OrderBuffer, gs.m_GpuSortKeys);
+                cmb.SetGlobalFloat(GaussianSplatRenderer.Props.SplatScale, gs.m_SplatScale);
+                cmb.SetGlobalFloat(GaussianSplatRenderer.Props.SplatOpacityScale, gs.m_OpacityScale);
+                cmb.SetGlobalFloat(GaussianSplatRenderer.Props.SplatSize, gs.m_PointDisplaySize);
+                cmb.SetGlobalInt(GaussianSplatRenderer.Props.SHOrder, gs.m_SHOrder);
+                cmb.SetGlobalInt(GaussianSplatRenderer.Props.SHOnly, gs.m_SHOnly ? 1 : 0);
+                cmb.SetGlobalInt(GaussianSplatRenderer.Props.DisplayIndex, gs.m_RenderMode == GaussianSplatRenderer.RenderMode.DebugPointIndices ? 1 : 0);
+                cmb.SetGlobalInt(GaussianSplatRenderer.Props.DisplayChunks, gs.m_RenderMode == GaussianSplatRenderer.RenderMode.DebugChunkBounds ? 1 : 0);
                 mpb.SetFloat(GaussianSplatRenderer.Props.SplatScale, gs.m_SplatScale);
                 mpb.SetFloat(GaussianSplatRenderer.Props.SplatOpacityScale, gs.m_OpacityScale);
                 mpb.SetFloat(GaussianSplatRenderer.Props.SplatSize, gs.m_PointDisplaySize);
@@ -667,6 +693,47 @@ namespace GaussianSplatting.Runtime
         }
 
         internal void SetAssetDataOnMaterial(MaterialPropertyBlock mat)
+        {
+            mat.SetBuffer(Props.SplatPos, m_GpuPosData);
+            mat.SetBuffer(Props.SplatLayer, m_GpuLayerData);
+            mat.SetBuffer(Props.SplatOther, m_GpuOtherData);
+            mat.SetBuffer(Props.SplatSH, m_GpuSHData);
+            mat.SetTexture(Props.SplatColor, m_GpuColorData);
+            mat.SetBuffer(Props.SplatSelectedBits, m_GpuEditSelected ?? m_GpuPosData);
+            mat.SetBuffer(Props.SplatDeletedBits, m_GpuEditDeleted ?? m_GpuPosData);
+            mat.SetInt(Props.SplatBitsValid, m_GpuEditSelected != null && m_GpuEditDeleted != null ? 1 : 0);
+            uint format = (uint)m_Asset.posFormat | ((uint)m_Asset.scaleFormat << 8) | ((uint)m_Asset.shFormat << 16);
+            mat.SetInteger(Props.SplatFormat, (int)format);
+            mat.SetInteger(Props.SplatCount, m_SplatCount);
+            mat.SetInteger(Props.SplatChunkCount, m_GpuChunksValid ? m_GpuChunks.count : 0);
+            mat.SetInteger(Props.OptimizeForQuest, m_OptimizeForQuest ? 1 : 0);
+        }
+
+        // Estate fork: command-buffer twin — global bindings for every asset
+        // parameter the DRAW shader reads. Vulkan's binding of MPB/material
+        // SSBOs at DrawProcedural is unreliable on Quest; globals are not
+        // (see SortAndRenderSplats).
+        internal void BindDrawGlobals(CommandBuffer cmb)
+        {
+            cmb.SetGlobalBuffer(Props.SplatPos, m_GpuPosData);
+            cmb.SetGlobalBuffer(Props.SplatLayer, m_GpuLayerData);
+            cmb.SetGlobalBuffer(Props.SplatOther, m_GpuOtherData);
+            cmb.SetGlobalBuffer(Props.SplatSH, m_GpuSHData);
+            cmb.SetGlobalTexture(Props.SplatColor, m_GpuColorData);
+            cmb.SetGlobalBuffer(Props.SplatSelectedBits, m_GpuEditSelected ?? m_GpuPosData);
+            cmb.SetGlobalBuffer(Props.SplatDeletedBits, m_GpuEditDeleted ?? m_GpuPosData);
+            cmb.SetGlobalInt(Props.SplatBitsValid, m_GpuEditSelected != null && m_GpuEditDeleted != null ? 1 : 0);
+            uint format = (uint)m_Asset.posFormat | ((uint)m_Asset.scaleFormat << 8) | ((uint)m_Asset.shFormat << 16);
+            cmb.SetGlobalInt(Props.SplatFormat, (int)format);
+            cmb.SetGlobalInt(Props.SplatCount, m_SplatCount);
+            cmb.SetGlobalInt(Props.SplatChunkCount, m_GpuChunksValid ? m_GpuChunks.count : 0);
+            cmb.SetGlobalInt(Props.OptimizeForQuest, m_OptimizeForQuest ? 1 : 0);
+        }
+
+        // Estate fork: Material twin of the block above — Material and
+        // MaterialPropertyBlock share no interface, and Vulkan needs the
+        // bindings on the material itself (see SortAndRenderSplats).
+        internal void SetAssetDataOnMaterial(Material mat)
         {
             mat.SetBuffer(Props.SplatPos, m_GpuPosData);
             mat.SetBuffer(Props.SplatLayer, m_GpuLayerData);
