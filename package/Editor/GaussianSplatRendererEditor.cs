@@ -108,6 +108,14 @@ namespace GaussianSplatting.Editor
                     : "Gaussian Splat asset is not assigned or is empty";
                 EditorGUILayout.HelpBox(msg, MessageType.Error);
             }
+            // Estate fork: the same Quest guard the importer shows, standing
+            // against the ASSIGNED asset — an asset can arrive in a scene
+            // without ever passing through the creator window (copied project,
+            // version control), and the warning must not be skippable that way.
+            else if (QuestBudget.Assess(gs.asset.splatCount) != QuestBudget.Verdict.Within)
+            {
+                EditorGUILayout.HelpBox(QuestBudget.Describe(gs.asset.splatCount), MessageType.Warning);
+            }
 
             EditorGUILayout.Space();
             GUILayout.Label("Render Options", EditorStyles.boldLabel);

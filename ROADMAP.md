@@ -26,12 +26,14 @@ right preset for the Quest budget.
 
 ## Wanted, in priority order
 
-1. **A documented Quest preset, and a guard.**
-   The importer offers quality levels but nothing tells an author that a
-   capture will miss frame rate on device. Add a preset tuned to the ~400k
-   budget, and warn at import when a capture exceeds it. This is the change
-   that most protects the suite: the failure it prevents is silent —
-   everything imports fine and only the headset tells you, late.
+1. **A documented Quest preset, and a guard. — DONE 2026-08-30**
+   `Runtime/QuestBudget.cs` states the budget once, with its provenance
+   attached (`MeasuredOnOurDevice` stays false until a real device run flips
+   it). The creator window warns when the input PLY exceeds it, and the
+   renderer inspector repeats the warning against the assigned asset, so an
+   asset that arrives via version control cannot skip the guard. The preset
+   guidance is in the warning text: crop with cutouts, trim with the edit
+   tools, export modified PLY, re-import at `VeryLow`.
 
 2. **SOG / compressed-format import.**
    PlayCanvas' SOG format reports 15–20× smaller than PLY. It is

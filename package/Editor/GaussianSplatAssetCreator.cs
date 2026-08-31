@@ -96,8 +96,17 @@ namespace GaussianSplatting.Editor
             }
 
             if (m_PrevVertexCount > 0)
+            {
                 EditorGUILayout.LabelField("File Size",
                     $"{EditorUtility.FormatBytes(m_PrevFileSize)} - {m_PrevVertexCount:N0} splats");
+                // Estate fork: warn HERE, at import, when a capture exceeds the
+                // Quest budget. Without this the import succeeds, the editor
+                // renders it fine on a desktop GPU, and the first thing that
+                // says otherwise is the headset missing frame rate on device —
+                // the latest, most expensive place to learn it.
+                if (QuestBudget.Assess(m_PrevVertexCount) != QuestBudget.Verdict.Within)
+                    EditorGUILayout.HelpBox(QuestBudget.Describe(m_PrevVertexCount), MessageType.Warning);
+            }
             else
                 GUILayout.Space(EditorGUIUtility.singleLineHeight);
 
