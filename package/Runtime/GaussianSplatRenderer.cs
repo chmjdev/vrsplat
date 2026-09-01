@@ -115,6 +115,12 @@ namespace GaussianSplatting.Runtime
         // ReSharper disable once MemberCanBePrivate.Global - used by HDRP/URP features that are not always compiled
         static int s_DrawReportFrames;
 
+        static void BindBuffer(CommandBuffer cmb, int id, GraphicsBuffer buffer, GraphicsBuffer fallback)
+        {
+            var chosen = buffer ?? fallback;
+            if (chosen != null) cmb.SetGlobalBuffer(id, chosen);
+        }
+
         public Material SortAndRenderSplats(Camera cam, CommandBuffer cmb)
         {
             Material matComposite = null;
@@ -175,9 +181,9 @@ namespace GaussianSplatting.Runtime
                 // it works it wins with identical values.
                 gs.SetAssetDataOnMaterial(displayMat);
                 gs.BindDrawGlobals(cmb);
-                cmb.SetGlobalBuffer(GaussianSplatRenderer.Props.SplatChunks, gs.m_GpuChunks);
-                cmb.SetGlobalBuffer(GaussianSplatRenderer.Props.SplatViewData, gs.m_GpuView);
-                cmb.SetGlobalBuffer(GaussianSplatRenderer.Props.OrderBuffer, gs.m_GpuSortKeys);
+                BindBuffer(cmb, GaussianSplatRenderer.Props.SplatChunks, gs.m_GpuChunks, null);
+                BindBuffer(cmb, GaussianSplatRenderer.Props.SplatViewData, gs.m_GpuView, null);
+                BindBuffer(cmb, GaussianSplatRenderer.Props.OrderBuffer, gs.m_GpuSortKeys, null);
                 cmb.SetGlobalFloat(GaussianSplatRenderer.Props.SplatScale, gs.m_SplatScale);
                 cmb.SetGlobalFloat(GaussianSplatRenderer.Props.SplatOpacityScale, gs.m_OpacityScale);
                 cmb.SetGlobalFloat(GaussianSplatRenderer.Props.SplatSize, gs.m_PointDisplaySize);
@@ -206,6 +212,12 @@ namespace GaussianSplatting.Runtime
                 if (gs.m_RenderMode == GaussianSplatRenderer.RenderMode.DebugChunkBounds)
                     instanceCount = gs.m_GpuChunksValid ? gs.m_GpuChunks.count : 0;
 
+                if (gs.m_GpuView == null || gs.m_GpuSortKeys == null)
+                {
+                    Debug.LogWarning($"[gaussiansplat] skipping draw of '{gs.name}': view/order buffer missing");
+                    continue;
+                }
+
                 cmb.BeginSample(s_ProfDraw);
                 // Draw with the GLOBALS bound above and NO property block.
                 //
@@ -227,7 +239,9 @@ namespace GaussianSplatting.Runtime
                               $" (supported={displayMat.shader.isSupported}), asset={gs.HasValidAsset}, setup={gs.HasValidRenderSetup}" +
                               $", view={(gs.m_GpuView != null ? gs.m_GpuView.count : -1)}" +
                               $", order={(gs.m_GpuSortKeys != null ? gs.m_GpuSortKeys.count : -1)}" +
-                              $", chunks={(gs.m_GpuChunksValid ? gs.m_GpuChunks.count : 0)}, quest={gs.m_OptimizeForQuest}");
+                              $", chunks={(gs.m_GpuChunksValid ? gs.m_GpuChunks.count : 0)}, quest={gs.m_OptimizeForQuest}" +
+                              $", buffers[pos={gs.HasPosBuffer} layer={gs.HasLayerBuffer} other={gs.HasOtherBuffer}" +
+                              $" sh={gs.HasSHBuffer} colour={gs.HasColourTexture} chunkBuf={gs.HasChunkBuffer}]");
             }
             return matComposite;
         }
@@ -441,6 +455,16 @@ namespace GaussianSplatting.Runtime
             m_Asset.shDataSize > 0 &&
             m_Asset.colorDataSize > 0;
         public bool HasValidRenderSetup => m_GpuPosData != null && m_GpuOtherData != null && m_GpuChunks != null;
+
+        // Which GPU resources actually exist. A runtime-created asset can
+        // legitimately lack some, and a null one bound as a global faults
+        // Vulkan — so the on-device report names the missing one.
+        internal bool HasPosBuffer => m_GpuPosData != null;
+        internal bool HasLayerBuffer => m_GpuLayerData != null;
+        internal bool HasOtherBuffer => m_GpuOtherData != null;
+        internal bool HasSHBuffer => m_GpuSHData != null;
+        internal bool HasColourTexture => m_GpuColorData != null;
+        internal bool HasChunkBuffer => m_GpuChunks != null;
 
         const int kGpuViewDataSize = 40;
 
@@ -740,15 +764,27 @@ namespace GaussianSplatting.Runtime
         // parameter the DRAW shader reads. Vulkan's binding of MPB/material
         // SSBOs at DrawProcedural is unreliable on Quest; globals are not
         // (see SortAndRenderSplats).
+        /// <summary>Binds a buffer as a global, substituting a known-valid
+        /// one when it is missing. A NULL GraphicsBuffer bound as a global is
+        /// tolerated on Metal and FAULTS the render thread on Vulkan
+        /// (SIGSEGV inside libunity, milliseconds after the draw is issued) —
+        /// and a runtime-created asset legitimately lacks some layers, so
+        /// this is a real state, not a defensive nicety.</summary>
+        static void BindBuffer(CommandBuffer cmb, int id, GraphicsBuffer buffer, GraphicsBuffer fallback)
+        {
+            var chosen = buffer ?? fallback;
+            if (chosen != null) cmb.SetGlobalBuffer(id, chosen);
+        }
+
         internal void BindDrawGlobals(CommandBuffer cmb)
         {
-            cmb.SetGlobalBuffer(Props.SplatPos, m_GpuPosData);
-            cmb.SetGlobalBuffer(Props.SplatLayer, m_GpuLayerData);
-            cmb.SetGlobalBuffer(Props.SplatOther, m_GpuOtherData);
-            cmb.SetGlobalBuffer(Props.SplatSH, m_GpuSHData);
-            cmb.SetGlobalTexture(Props.SplatColor, m_GpuColorData);
-            cmb.SetGlobalBuffer(Props.SplatSelectedBits, m_GpuEditSelected ?? m_GpuPosData);
-            cmb.SetGlobalBuffer(Props.SplatDeletedBits, m_GpuEditDeleted ?? m_GpuPosData);
+            BindBuffer(cmb, Props.SplatPos, m_GpuPosData, null);
+            BindBuffer(cmb, Props.SplatLayer, m_GpuLayerData, m_GpuPosData);
+            BindBuffer(cmb, Props.SplatOther, m_GpuOtherData, m_GpuPosData);
+            BindBuffer(cmb, Props.SplatSH, m_GpuSHData, m_GpuPosData);
+            if (m_GpuColorData != null) cmb.SetGlobalTexture(Props.SplatColor, m_GpuColorData);
+            BindBuffer(cmb, Props.SplatSelectedBits, m_GpuEditSelected, m_GpuPosData);
+            BindBuffer(cmb, Props.SplatDeletedBits, m_GpuEditDeleted, m_GpuPosData);
             cmb.SetGlobalInt(Props.SplatBitsValid, m_GpuEditSelected != null && m_GpuEditDeleted != null ? 1 : 0);
             uint format = (uint)m_Asset.posFormat | ((uint)m_Asset.scaleFormat << 8) | ((uint)m_Asset.shFormat << 16);
             cmb.SetGlobalInt(Props.SplatFormat, (int)format);
