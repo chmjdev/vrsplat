@@ -114,6 +114,13 @@ namespace GaussianSplatting.Runtime
 
         // ReSharper disable once MemberCanBePrivate.Global - used by HDRP/URP features that are not always compiled
         static int s_DrawReportFrames;
+        static bool s_ViewDataProbed;
+
+        static bool IsAllZero(Unity.Collections.NativeArray<uint> data)
+        {
+            for (int i = 0; i < data.Length; i++) if (data[i] != 0) return false;
+            return true;
+        }
 
         static void BindBuffer(CommandBuffer cmb, int id, GraphicsBuffer buffer, GraphicsBuffer fallback)
         {
@@ -231,8 +238,35 @@ namespace GaussianSplatting.Runtime
                 // Globals are set immediately before each draw and the
                 // command buffer executes in order, so one renderer's values
                 // cannot leak into another's.
-                cmb.DrawProcedural(gs.m_GpuIndexBuffer, matrix, displayMat, 0, topology, indexCount, instanceCount);
+                // The property block is REQUIRED, not redundant: on Quest's
+                // Vulkan backend the command-buffer globals set above do not
+                // reach this shader, and drawing without the block makes it
+                // read unbound buffers — SIGSEGV in libunity milliseconds
+                // after the draw. Measured both ways on device: with the
+                // block the app is stable, without it it dies. The globals
+                // stay because they are correct where they are honoured and
+                // cost nothing where they are not.
+                cmb.DrawProcedural(gs.m_GpuIndexBuffer, matrix, displayMat, 0, topology, indexCount, instanceCount, mpb);
                 cmb.EndSample(s_ProfDraw);
+
+                if (report && !s_ViewDataProbed && gs.m_GpuView != null)
+                {
+                    s_ViewDataProbed = true;
+                    var probed = gs;
+                    // If CalcViewData never ran, or ran and wrote nothing,
+                    // every splat is degenerate and the room is invisible
+                    // with no warning anywhere. Read one entry back and say
+                    // what is actually in it.
+                    UnityEngine.Rendering.AsyncGPUReadback.Request(gs.m_GpuView, 64, 0, request =>
+                    {
+                        if (request.hasError) { Debug.LogWarning("[gaussiansplat] view-data readback failed"); return; }
+                        var data = request.GetData<uint>();
+                        var sb = new System.Text.StringBuilder("[gaussiansplat] view data[0] raw:");
+                        for (int i = 0; i < Mathf.Min(16, data.Length); i++) sb.Append(' ').Append(data[i]);
+                        sb.Append(data.Length > 0 && IsAllZero(data) ? "  -> ALL ZERO (compute produced nothing)" : "  -> non-zero");
+                        Debug.Log(sb.ToString());
+                    });
+                }
 
                 if (report)
                     Debug.Log($"[gaussiansplat] draw '{gs.name}': {instanceCount} splats, shader '{displayMat.shader.name}'" +
