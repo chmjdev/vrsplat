@@ -113,9 +113,17 @@ namespace GaussianSplatting.Runtime
         }
 
         // ReSharper disable once MemberCanBePrivate.Global - used by HDRP/URP features that are not always compiled
+        static int s_DrawReportFrames;
+
         public Material SortAndRenderSplats(Camera cam, CommandBuffer cmb)
         {
             Material matComposite = null;
+            // First few frames only: say what is actually being drawn. A
+            // silent render path is why "the room is invisible" took a day
+            // to pin down — the log now states the splat count, the shader
+            // and the buffer validity, on device, in a player build.
+            bool report = s_DrawReportFrames < 3;
+            if (report) s_DrawReportFrames++;
             foreach (var kvp in m_ActiveSplats)
             {
                 var gs = kvp.Item1;
@@ -199,8 +207,27 @@ namespace GaussianSplatting.Runtime
                     instanceCount = gs.m_GpuChunksValid ? gs.m_GpuChunks.count : 0;
 
                 cmb.BeginSample(s_ProfDraw);
-                cmb.DrawProcedural(gs.m_GpuIndexBuffer, matrix, displayMat, 0, topology, indexCount, instanceCount, mpb);
+                // Draw with the GLOBALS bound above and NO property block.
+                //
+                // A MaterialPropertyBlock overrides globals, so passing one
+                // here re-introduced the very failure the globals exist to
+                // avoid: on Quest's Vulkan backend the MPB's buffer bindings
+                // never reach the DXC-compiled shader, and because the MPB
+                // wins, the correct global bindings were ignored. The driver
+                // stopped warning (something *was* bound) while the room
+                // still rendered as nothing — a fix that looked like a fix.
+                // Globals are set immediately before each draw and the
+                // command buffer executes in order, so one renderer's values
+                // cannot leak into another's.
+                cmb.DrawProcedural(gs.m_GpuIndexBuffer, matrix, displayMat, 0, topology, indexCount, instanceCount);
                 cmb.EndSample(s_ProfDraw);
+
+                if (report)
+                    Debug.Log($"[gaussiansplat] draw '{gs.name}': {instanceCount} splats, shader '{displayMat.shader.name}'" +
+                              $" (supported={displayMat.shader.isSupported}), asset={gs.HasValidAsset}, setup={gs.HasValidRenderSetup}" +
+                              $", view={(gs.m_GpuView != null ? gs.m_GpuView.count : -1)}" +
+                              $", order={(gs.m_GpuSortKeys != null ? gs.m_GpuSortKeys.count : -1)}" +
+                              $", chunks={(gs.m_GpuChunksValid ? gs.m_GpuChunks.count : 0)}, quest={gs.m_OptimizeForQuest}");
             }
             return matComposite;
         }

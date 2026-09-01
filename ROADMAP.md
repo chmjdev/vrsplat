@@ -51,6 +51,31 @@ right preset for the Quest budget.
      project fail — the actual Editor API *usages* were already guarded,
      only the usings were not.
 
+1e. **Single Pass Instanced stereo support. — OPEN**
+   The render path is not stereo-aware, so it produces NOTHING in a headset
+   configured for Single Pass Instanced (the Quest default, and Unity's):
+   `GaussianComposite.shader` declares `Texture2D _GaussianSplatRT` and
+   loads `int3(xy, 0)`, but under SPI the camera target — and therefore the
+   RT allocated from `cameraTargetDescriptor` in `GaussianSplatURPFeature.
+   OnCameraSetup` — is a **Texture2DArray with one slice per eye**.
+   `RenderGaussianSplats.shader` likewise carries no stereo macros
+   (`UNITY_VERTEX_OUTPUT_STEREO`, `UNITY_SETUP_INSTANCE_ID`), so it cannot
+   route to the right slice and resolves `UNITY_MATRIX_VP` at eye 0.
+   Everything else in the scene (URP lit/unlit, TMP) draws correctly, which
+   is what makes this look like "the splats are broken" rather than
+   "stereo is unsupported".
+
+   **vrsimulator works around it by rendering Multi-pass** (OpenXR
+   `m_renderMode: 0`), where each eye is its own pass with a plain 2D
+   target and these shaders behave exactly as they do on a flat desktop.
+   That costs a second pass — and a second sort per frame unless
+   `m_CenterEyeOnly` is set — so proper SPI support is a real optimisation,
+   to be done with the frame-rate telemetry now shipping in
+   vr-session-result rather than by assumption.
+
+   Observed on a Quest 3S, 2026-09-01: room invisible, guidance panel and
+   item highlights correct.
+
 1d. **Vulkan/Quest draw bindings. — DONE 2026-08-31**
    On Quest's Vulkan backend (the splat shader compiles through DXC), the
    structured/byte-address buffers the DRAW shader reads never arrived when
