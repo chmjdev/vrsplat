@@ -60,13 +60,29 @@ namespace GaussianSplatting.Runtime
                 {
                     xrView = xr.GetViewMatrix(0);
                     xrProj = xr.GetProjMatrix(0);
-                    if (!s_LoggedXRHandoff)
+                    // A ONE-SHOT log here cannot tell "the fix engaged" from
+                    // "it only ever engaged for the left eye" -- the first
+                    // call under multi-pass is ALWAYS multipassId 0 by
+                    // definition (XRPass.isFirstCameraPass). Logging the
+                    // first several calls, across BOTH eyes, is what
+                    // actually answers whether the right-eye pass runs at
+                    // all and whether its matrix genuinely differs.
+                    if (s_XRHandoffLogged < 8)
                     {
-                        s_LoggedXRHandoff = true;
-                        Debug.Log($"[gaussiansplat] URP XR handoff: multipassId={xr.multipassId} " +
-                                  $"viewCount={xr.viewCount} singlePassEnabled={xr.singlePassEnabled} " +
+                        s_XRHandoffLogged++;
+                        Debug.Log($"[gaussiansplat] URP XR handoff #{s_XRHandoffLogged}: " +
+                                  $"cam={renderingData.cameraData.camera.GetInstanceID()} " +
+                                  $"multipassId={xr.multipassId} viewCount={xr.viewCount} " +
+                                  $"singlePassEnabled={xr.singlePassEnabled} " +
+                                  $"viewDiag=({xrView.Value.m00:F3},{xrView.Value.m11:F3},{xrView.Value.m22:F3}) " +
                                   $"projDiag=({xrProj.Value.m00:F3},{xrProj.Value.m11:F3})");
                     }
+                }
+                else if (s_XRHandoffLogged < 8)
+                {
+                    s_XRHandoffLogged++;
+                    Debug.Log($"[gaussiansplat] URP XR handoff #{s_XRHandoffLogged}: " +
+                              $"cam={renderingData.cameraData.camera.GetInstanceID()} xr={(xr == null ? "null" : "disabled")}");
                 }
 
                 // add sorting, view calc and drawing commands for each splat object
@@ -83,7 +99,7 @@ namespace GaussianSplatting.Runtime
 
         GSRenderPass m_Pass;
         bool m_HasCamera;
-        static bool s_LoggedXRHandoff;
+        static int s_XRHandoffLogged;
 
         public override void Create()
         {
