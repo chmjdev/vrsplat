@@ -51,44 +51,45 @@ right preset for the Quest budget.
      project fail — the actual Editor API *usages* were already guarded,
      only the usings were not.
 
-1e. **Single Pass Instanced stereo support. — OPEN**
-   The render path is not stereo-aware, so it produces NOTHING in a headset
-   configured for Single Pass Instanced (the Quest default, and Unity's):
-   `GaussianComposite.shader` declares `Texture2D _GaussianSplatRT` and
-   loads `int3(xy, 0)`, but under SPI the camera target — and therefore the
-   RT allocated from `cameraTargetDescriptor` in `GaussianSplatURPFeature.
-   OnCameraSetup` — is a **Texture2DArray with one slice per eye**.
-   `RenderGaussianSplats.shader` likewise carries no stereo macros
-   (`UNITY_VERTEX_OUTPUT_STEREO`, `UNITY_SETUP_INSTANCE_ID`), so it cannot
-   route to the right slice and resolves `UNITY_MATRIX_VP` at eye 0.
-   Everything else in the scene (URP lit/unlit, TMP) draws correctly, which
-   is what makes this look like "the splats are broken" rather than
-   "stereo is unsupported".
+1e. **Single Pass Instanced stereo. — UNVERIFIED, currently Multi-pass**
+   vrsimulator renders Multi-pass (OpenXR `m_renderMode: 0`). An earlier
+   draft of this entry asserted the shaders "produce NOTHING" under Single
+   Pass Instanced because the composite reads a `Texture2D` and the splat
+   vertex shader carries no stereo macros. That reasoning is plausible and
+   the shaders really do lack the macros — but the invisible room it was
+   explaining turned out to be the spawn position (below), and SPI has NOT
+   been re-tested since. Treat it as an open measurement, not a known
+   defect: switch back to SPI, capture the screen, compare frame time with
+   the telemetry in vr-session-result. Multi-pass costs a second sort per
+   frame unless `m_CenterEyeOnly` is set.
 
-   **vrsimulator works around it by rendering Multi-pass** (OpenXR
-   `m_renderMode: 0`), where each eye is its own pass with a plain 2D
-   target and these shaders behave exactly as they do on a flat desktop.
-   That costs a second pass — and a second sort per frame unless
-   `m_CenterEyeOnly` is set — so proper SPI support is a real optimisation,
-   to be done with the frame-rate telemetry now shipping in
-   vr-session-result rather than by assumption.
+1d. **Vulkan/Quest draw bindings. — RETRACTED 2026-09-01**
+   The 2026-08-31 entry claimed MaterialPropertyBlock buffer bindings were
+   dropped on Vulkan and "fixed" it by also binding everything as
+   command-buffer globals. Measured on a Quest 3S, both halves were wrong:
+   the globals never reach this shader on that backend, and the property
+   block is what actually delivers the buffers. Every variant of the
+   globals (with the block, without it, null-guarded, with substituted
+   buffers) ended in a SIGSEGV milliseconds after the draw; drawing without
+   the block reads unbound buffers, and substituting a different-typed
+   buffer for a missing layer reads out of bounds. The experiment is
+   removed; the draw is upstream's property-block-only path again.
 
-   Observed on a Quest 3S, 2026-09-01: room invisible, guidance panel and
-   item highlights correct.
+   The room really was invisible — but because the trainee's HEAD sat at
+   the rig plus the tracked pose, i.e. wherever the headset physically was
+   relative to the guardian origin, which put them inside a wall.
+   vrsimulator now recentres the rig on the authored spawn
+   (`XRRigController.RecentreOnSpawn`). Measured splat screen extent went
+   from a mean of 269 px (fog) to 48 px (a room); desktop baseline 65 px.
 
-1d. **Vulkan/Quest draw bindings. — DONE 2026-08-31**
-   On Quest's Vulkan backend (the splat shader compiles through DXC), the
-   structured/byte-address buffers the DRAW shader reads never arrived when
-   bound via MaterialPropertyBlock — the driver logged `Shader requires a
-   compute buffer "_SplatPos", but none provided. Skipping draw calls` for
-   every source buffer and the room rendered as nothing, while Metal
-   tolerated the identical path (first observed on a Quest 3S the day the
-   first consumer APK ran). Mirroring the bindings onto the per-renderer
-   material did not help either. The fix: `BindDrawGlobals` — every
-   parameter the draw reads is also bound as a command-buffer GLOBAL, in
-   draw order, immediately before its `DrawProcedural` (the same mechanism
-   the compute side has always relied on). The MPB stays and wins wherever
-   the backend honours it, with identical values.
+   What survives from the investigation, both harmless where they are
+   no-ops and correct where they are not: `CalcViewData` uses the eye's
+   view/projection matrices when `cam.stereoEnabled`, and the draw shader
+   divides by the same `_VecScreenParams` the compute used (passed through
+   the property block) instead of trusting `_ScreenParams` to match.
+
+   The lesson, kept here because it cost a day: the driver going quiet is
+   not evidence that a binding arrived. Read the buffer back.
 
 1c. **RenderGraph port of `GaussianSplatURPFeature`.**
    Unity 6 URP runs RenderGraph by default and the feature's `GSRenderPass`

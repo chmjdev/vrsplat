@@ -114,19 +114,7 @@ namespace GaussianSplatting.Runtime
 
         // ReSharper disable once MemberCanBePrivate.Global - used by HDRP/URP features that are not always compiled
         static int s_DrawReportFrames;
-        static bool s_ViewDataProbed;
 
-        static bool IsAllZero(Unity.Collections.NativeArray<uint> data)
-        {
-            for (int i = 0; i < data.Length; i++) if (data[i] != 0) return false;
-            return true;
-        }
-
-        static void BindBuffer(CommandBuffer cmb, int id, GraphicsBuffer buffer, GraphicsBuffer fallback)
-        {
-            var chosen = buffer ?? fallback;
-            if (chosen != null) cmb.SetGlobalBuffer(id, chosen);
-        }
 
         public Material SortAndRenderSplats(Camera cam, CommandBuffer cmb)
         {
@@ -166,6 +154,17 @@ namespace GaussianSplatting.Runtime
                 if (displayMat == null)
                     continue;
 
+                // Give the draw the SAME screen size the compute used to
+                // project the splat axes (see _VecScreenParams in
+                // RenderGaussianSplats.shader). Through the property block,
+                // because command-buffer globals do not reach this shader on
+                // Quest's Vulkan backend.
+                int eyeW = UnityEngine.XR.XRSettings.eyeTextureWidth;
+                int eyeH = UnityEngine.XR.XRSettings.eyeTextureHeight;
+                mpb.SetVector(GaussianSplatRenderer.Props.VecScreenParams, new Vector4(
+                    eyeW != 0 ? eyeW : cam.pixelWidth,
+                    eyeH != 0 ? eyeH : cam.pixelHeight, 0, 0));
+
                 gs.SetAssetDataOnMaterial(mpb);
                 mpb.SetBuffer(GaussianSplatRenderer.Props.SplatChunks, gs.m_GpuChunks);
 
@@ -173,38 +172,13 @@ namespace GaussianSplatting.Runtime
 
                 mpb.SetBuffer(GaussianSplatRenderer.Props.OrderBuffer, gs.m_GpuSortKeys);
 
-                // Estate fork: on Quest's Vulkan backend (DXC-compiled splat
-                // shader), structured/byte-address buffers bound through the
-                // MaterialPropertyBlock — and even mirrored onto the material —
-                // intermittently never reach the DrawProcedural call: the
-                // driver logs "Shader requires a compute buffer X, but none
-                // provided. Skipping draw calls" and the splats vanish
-                // (observed on Quest 3S, 2026-08-31; Metal tolerates the same
-                // path, which hid it on desktop). Command-buffer GLOBAL
-                // bindings are honoured reliably on every backend — the
-                // compute side of this very file already depends on that — so
-                // every parameter the draw reads is also bound globally, in
-                // draw order, immediately before its draw. The MPB stays: where
-                // it works it wins with identical values.
-                gs.SetAssetDataOnMaterial(displayMat);
-                gs.BindDrawGlobals(cmb);
-                BindBuffer(cmb, GaussianSplatRenderer.Props.SplatChunks, gs.m_GpuChunks, null);
-                BindBuffer(cmb, GaussianSplatRenderer.Props.SplatViewData, gs.m_GpuView, null);
-                BindBuffer(cmb, GaussianSplatRenderer.Props.OrderBuffer, gs.m_GpuSortKeys, null);
-                cmb.SetGlobalFloat(GaussianSplatRenderer.Props.SplatScale, gs.m_SplatScale);
-                cmb.SetGlobalFloat(GaussianSplatRenderer.Props.SplatOpacityScale, gs.m_OpacityScale);
-                cmb.SetGlobalFloat(GaussianSplatRenderer.Props.SplatSize, gs.m_PointDisplaySize);
-                cmb.SetGlobalInt(GaussianSplatRenderer.Props.SHOrder, gs.m_SHOrder);
-                cmb.SetGlobalInt(GaussianSplatRenderer.Props.SHOnly, gs.m_SHOnly ? 1 : 0);
-                cmb.SetGlobalInt(GaussianSplatRenderer.Props.DisplayIndex, gs.m_RenderMode == GaussianSplatRenderer.RenderMode.DebugPointIndices ? 1 : 0);
-                cmb.SetGlobalInt(GaussianSplatRenderer.Props.DisplayChunks, gs.m_RenderMode == GaussianSplatRenderer.RenderMode.DebugChunkBounds ? 1 : 0);
-                mpb.SetFloat(GaussianSplatRenderer.Props.SplatScale, gs.m_SplatScale);
-                mpb.SetFloat(GaussianSplatRenderer.Props.SplatOpacityScale, gs.m_OpacityScale);
-                mpb.SetFloat(GaussianSplatRenderer.Props.SplatSize, gs.m_PointDisplaySize);
-                mpb.SetInteger(GaussianSplatRenderer.Props.SHOrder, gs.m_SHOrder);
-                mpb.SetInteger(GaussianSplatRenderer.Props.SHOnly, gs.m_SHOnly ? 1 : 0);
-                mpb.SetInteger(GaussianSplatRenderer.Props.DisplayIndex, gs.m_RenderMode == GaussianSplatRenderer.RenderMode.DebugPointIndices ? 1 : 0);
-                mpb.SetInteger(GaussianSplatRenderer.Props.DisplayChunks, gs.m_RenderMode == GaussianSplatRenderer.RenderMode.DebugChunkBounds ? 1 : 0);
+                // Property block only — upstream's path. An estate experiment
+                // that ALSO bound these as command-buffer globals is gone:
+                // measured on a Quest 3S the globals never reached this
+                // shader and every variant ended in a SIGSEGV after the draw.
+                // The "invisible room" it was chasing was the trainee spawning
+                // inside a wall (vrsimulator XRRigController.RecentreOnSpawn),
+                // not a binding problem. ROADMAP 1d records the retraction.
 
                 cmb.BeginSample(s_ProfCalcView);
                 gs.CalcViewData(cmb, cam, matrix);
@@ -248,25 +222,6 @@ namespace GaussianSplatting.Runtime
                 // cost nothing where they are not.
                 cmb.DrawProcedural(gs.m_GpuIndexBuffer, matrix, displayMat, 0, topology, indexCount, instanceCount, mpb);
                 cmb.EndSample(s_ProfDraw);
-
-                if (report && !s_ViewDataProbed && gs.m_GpuView != null)
-                {
-                    s_ViewDataProbed = true;
-                    var probed = gs;
-                    // If CalcViewData never ran, or ran and wrote nothing,
-                    // every splat is degenerate and the room is invisible
-                    // with no warning anywhere. Read one entry back and say
-                    // what is actually in it.
-                    UnityEngine.Rendering.AsyncGPUReadback.Request(gs.m_GpuView, 64, 0, request =>
-                    {
-                        if (request.hasError) { Debug.LogWarning("[gaussiansplat] view-data readback failed"); return; }
-                        var data = request.GetData<uint>();
-                        var sb = new System.Text.StringBuilder("[gaussiansplat] view data[0] raw:");
-                        for (int i = 0; i < Mathf.Min(16, data.Length); i++) sb.Append(' ').Append(data[i]);
-                        sb.Append(data.Length > 0 && IsAllZero(data) ? "  -> ALL ZERO (compute produced nothing)" : "  -> non-zero");
-                        Debug.Log(sb.ToString());
-                    });
-                }
 
                 if (report)
                     Debug.Log($"[gaussiansplat] draw '{gs.name}': {instanceCount} splats, shader '{displayMat.shader.name}'" +
@@ -488,6 +443,12 @@ namespace GaussianSplatting.Runtime
             m_Asset.otherDataSize > 0 &&
             m_Asset.shDataSize > 0 &&
             m_Asset.colorDataSize > 0;
+        /// <summary>The per-splat view data the compute stage writes
+        /// (position, axes, colour). Exposed for diagnostics: reading it
+        /// back is the only way to tell "the compute ran" from "the buffer
+        /// exists", which look identical in every log.</summary>
+        public GraphicsBuffer ViewDataBuffer => m_GpuView;
+
         public bool HasValidRenderSetup => m_GpuPosData != null && m_GpuOtherData != null && m_GpuChunks != null;
 
         // Which GPU resources actually exist. A runtime-created asset can
@@ -794,58 +755,7 @@ namespace GaussianSplatting.Runtime
             mat.SetInteger(Props.OptimizeForQuest, m_OptimizeForQuest ? 1 : 0);
         }
 
-        // Estate fork: command-buffer twin — global bindings for every asset
-        // parameter the DRAW shader reads. Vulkan's binding of MPB/material
-        // SSBOs at DrawProcedural is unreliable on Quest; globals are not
-        // (see SortAndRenderSplats).
-        /// <summary>Binds a buffer as a global, substituting a known-valid
-        /// one when it is missing. A NULL GraphicsBuffer bound as a global is
-        /// tolerated on Metal and FAULTS the render thread on Vulkan
-        /// (SIGSEGV inside libunity, milliseconds after the draw is issued) —
-        /// and a runtime-created asset legitimately lacks some layers, so
-        /// this is a real state, not a defensive nicety.</summary>
-        static void BindBuffer(CommandBuffer cmb, int id, GraphicsBuffer buffer, GraphicsBuffer fallback)
-        {
-            var chosen = buffer ?? fallback;
-            if (chosen != null) cmb.SetGlobalBuffer(id, chosen);
-        }
 
-        internal void BindDrawGlobals(CommandBuffer cmb)
-        {
-            BindBuffer(cmb, Props.SplatPos, m_GpuPosData, null);
-            BindBuffer(cmb, Props.SplatLayer, m_GpuLayerData, m_GpuPosData);
-            BindBuffer(cmb, Props.SplatOther, m_GpuOtherData, m_GpuPosData);
-            BindBuffer(cmb, Props.SplatSH, m_GpuSHData, m_GpuPosData);
-            if (m_GpuColorData != null) cmb.SetGlobalTexture(Props.SplatColor, m_GpuColorData);
-            BindBuffer(cmb, Props.SplatSelectedBits, m_GpuEditSelected, m_GpuPosData);
-            BindBuffer(cmb, Props.SplatDeletedBits, m_GpuEditDeleted, m_GpuPosData);
-            cmb.SetGlobalInt(Props.SplatBitsValid, m_GpuEditSelected != null && m_GpuEditDeleted != null ? 1 : 0);
-            uint format = (uint)m_Asset.posFormat | ((uint)m_Asset.scaleFormat << 8) | ((uint)m_Asset.shFormat << 16);
-            cmb.SetGlobalInt(Props.SplatFormat, (int)format);
-            cmb.SetGlobalInt(Props.SplatCount, m_SplatCount);
-            cmb.SetGlobalInt(Props.SplatChunkCount, m_GpuChunksValid ? m_GpuChunks.count : 0);
-            cmb.SetGlobalInt(Props.OptimizeForQuest, m_OptimizeForQuest ? 1 : 0);
-        }
-
-        // Estate fork: Material twin of the block above — Material and
-        // MaterialPropertyBlock share no interface, and Vulkan needs the
-        // bindings on the material itself (see SortAndRenderSplats).
-        internal void SetAssetDataOnMaterial(Material mat)
-        {
-            mat.SetBuffer(Props.SplatPos, m_GpuPosData);
-            mat.SetBuffer(Props.SplatLayer, m_GpuLayerData);
-            mat.SetBuffer(Props.SplatOther, m_GpuOtherData);
-            mat.SetBuffer(Props.SplatSH, m_GpuSHData);
-            mat.SetTexture(Props.SplatColor, m_GpuColorData);
-            mat.SetBuffer(Props.SplatSelectedBits, m_GpuEditSelected ?? m_GpuPosData);
-            mat.SetBuffer(Props.SplatDeletedBits, m_GpuEditDeleted ?? m_GpuPosData);
-            mat.SetInt(Props.SplatBitsValid, m_GpuEditSelected != null && m_GpuEditDeleted != null ? 1 : 0);
-            uint format = (uint)m_Asset.posFormat | ((uint)m_Asset.scaleFormat << 8) | ((uint)m_Asset.shFormat << 16);
-            mat.SetInteger(Props.SplatFormat, (int)format);
-            mat.SetInteger(Props.SplatCount, m_SplatCount);
-            mat.SetInteger(Props.SplatChunkCount, m_GpuChunksValid ? m_GpuChunks.count : 0);
-            mat.SetInteger(Props.OptimizeForQuest, m_OptimizeForQuest ? 1 : 0);
-        }
 
         static void DisposeBuffer(ref GraphicsBuffer buf)
         {
@@ -911,8 +821,28 @@ namespace GaussianSplatting.Runtime
 
             var tr = transform;
 
+            // Use the EYE's matrices in stereo, not the camera's mono ones.
+            //
+            // Splat screen size is projected here, and projected size scales
+            // with 1/tan(fov/2). A headset eye has a far wider frustum than
+            // the mono camera, so projecting with the mono matrix inflates
+            // every splat — measured on a Quest 3S as a mean screen extent of
+            // 269 px against 65 px for the same room and resolution on
+            // desktop, which renders as fog rather than a room. The mono view
+            // matrix is wrong too: it lacks the half-IPD offset, which is the
+            // position error the `_OptimizeForQuest` branch in
+            // RenderGaussianSplats.shader recomputes around. That branch
+            // patched the position half of this bug; this is the size half.
             Matrix4x4 matView = cam.worldToCameraMatrix;
             Matrix4x4 matProj = GL.GetGPUProjectionMatrix(cam.projectionMatrix, true);
+            if (cam.stereoEnabled)
+            {
+                var eye = cam.stereoActiveEye == Camera.MonoOrStereoscopicEye.Right
+                    ? Camera.StereoscopicEye.Right
+                    : Camera.StereoscopicEye.Left;
+                matView = cam.GetStereoViewMatrix(eye);
+                matProj = GL.GetGPUProjectionMatrix(cam.GetStereoProjectionMatrix(eye), true);
+            }
             Matrix4x4 matO2W = tr.localToWorldMatrix;
             Matrix4x4 matW2O = tr.worldToLocalMatrix;
             int screenW = cam.pixelWidth, screenH = cam.pixelHeight;
@@ -1162,8 +1092,28 @@ namespace GaussianSplatting.Runtime
             Graphics.CopyBuffer(m_GpuEditSelectedMouseDown, m_GpuEditSelected);
 
             var tr = transform;
+            // Use the EYE's matrices in stereo, not the camera's mono ones.
+            //
+            // Splat screen size is projected here, and projected size scales
+            // with 1/tan(fov/2). A headset eye has a far wider frustum than
+            // the mono camera, so projecting with the mono matrix inflates
+            // every splat — measured on a Quest 3S as a mean screen extent of
+            // 269 px against 65 px for the same room and resolution on
+            // desktop, which renders as fog rather than a room. The mono view
+            // matrix is wrong too: it lacks the half-IPD offset, which is the
+            // position error the `_OptimizeForQuest` branch in
+            // RenderGaussianSplats.shader recomputes around. That branch
+            // patched the position half of this bug; this is the size half.
             Matrix4x4 matView = cam.worldToCameraMatrix;
             Matrix4x4 matProj = GL.GetGPUProjectionMatrix(cam.projectionMatrix, true);
+            if (cam.stereoEnabled)
+            {
+                var eye = cam.stereoActiveEye == Camera.MonoOrStereoscopicEye.Right
+                    ? Camera.StereoscopicEye.Right
+                    : Camera.StereoscopicEye.Left;
+                matView = cam.GetStereoViewMatrix(eye);
+                matProj = GL.GetGPUProjectionMatrix(cam.GetStereoProjectionMatrix(eye), true);
+            }
             Matrix4x4 matO2W = tr.localToWorldMatrix;
             Matrix4x4 matW2O = tr.worldToLocalMatrix;
             int screenW = cam.pixelWidth, screenH = cam.pixelHeight;

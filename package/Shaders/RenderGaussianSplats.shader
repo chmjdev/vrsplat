@@ -34,6 +34,15 @@ ByteAddressBuffer _SplatSelectedBits;
 uint _SplatBitsValid;
 uint _OptimizeForQuest;
 
+// The screen size the COMPUTE stage used when it projected each splat's
+// axes. It must be the same number here, or every splat is scaled by the
+// ratio between the two. On a desktop _ScreenParams happens to equal it, so
+// the bug is invisible; in XR the compute uses the eye-texture size while
+// _ScreenParams is the current render target, and the splats come out
+// enormously oversized — a room you are standing inside of, rendered as one
+// giant blur (Quest 3S, 2026-09-01).
+float4 _VecScreenParams;
+
 v2f vert (uint vtxID : SV_VertexID, uint instID : SV_InstanceID)
 {
 	v2f o = (v2f)0;
@@ -68,7 +77,8 @@ v2f vert (uint vtxID : SV_VertexID, uint instID : SV_InstanceID)
 
 		o.pos = quadPos;
 
-		float2 deltaScreenPos = (quadPos.x * view.axis1 + quadPos.y * view.axis2) * 2 / _ScreenParams.xy;
+		float2 screenSize = _VecScreenParams.x > 0 ? _VecScreenParams.xy : _ScreenParams.xy;
+		float2 deltaScreenPos = (quadPos.x * view.axis1 + quadPos.y * view.axis2) * 2 / screenSize;
 		o.vertex = centerClipPos;
 		o.vertex.xy += deltaScreenPos * centerClipPos.w;
 
