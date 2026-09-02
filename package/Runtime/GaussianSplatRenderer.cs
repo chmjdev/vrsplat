@@ -116,7 +116,8 @@ namespace GaussianSplatting.Runtime
         static int s_DrawReportFrames;
 
 
-        public Material SortAndRenderSplats(Camera cam, CommandBuffer cmb)
+        public Material SortAndRenderSplats(Camera cam, CommandBuffer cmb,
+                                            Matrix4x4? xrViewOverride = null, Matrix4x4? xrRawProjOverride = null)
         {
             Material matComposite = null;
             // First few frames only: say what is actually being drawn. A
@@ -181,7 +182,7 @@ namespace GaussianSplatting.Runtime
                 // not a binding problem. ROADMAP 1d records the retraction.
 
                 cmb.BeginSample(s_ProfCalcView);
-                gs.CalcViewData(cmb, cam, matrix);
+                gs.CalcViewData(cmb, cam, matrix, xrViewOverride, xrRawProjOverride);
                 cmb.EndSample(s_ProfCalcView);
 
                 // draw
@@ -815,8 +816,10 @@ namespace GaussianSplatting.Runtime
         }
 
         static bool s_LoggedViewState;
+        static bool s_LoggedXRPath;
 
-        internal void CalcViewData(CommandBuffer cmb, Camera cam, Matrix4x4 matrix)
+        internal void CalcViewData(CommandBuffer cmb, Camera cam, Matrix4x4 matrix,
+                                   Matrix4x4? xrViewOverride = null, Matrix4x4? xrRawProjOverride = null)
         {
             if (cam.cameraType == CameraType.Preview)
                 return;
@@ -861,7 +864,27 @@ namespace GaussianSplatting.Runtime
             // patched the position half of this bug; this is the size half.
             Matrix4x4 matView = cam.worldToCameraMatrix;
             Matrix4x4 matProj = GL.GetGPUProjectionMatrix(cam.projectionMatrix, true);
-            if (cam.stereoEnabled)
+            if (xrViewOverride.HasValue && xrRawProjOverride.HasValue)
+            {
+                // URP under XR multi-pass: cam.stereoActiveEye is a
+                // built-in-render-pipeline API that URP never populates, so
+                // it always read "Mono" here and the branch below silently
+                // fell back to the LEFT eye's matrices for BOTH eye passes
+                // — zero stereo parallax for every splat in the room, on
+                // every headset session this package has ever rendered
+                // under URP (verified: a Quest 3S log read activeEye=Mono
+                // with stereoEnabled=true, and the two eyes' own stereo
+                // projection diagonals genuinely differ, 1.035/0.869 vs
+                // 1.000/1.000, so using one for both is a real, measured
+                // error, not a rounding difference). URP tracks which eye
+                // is rendering in CameraData.xr instead, which the render
+                // pass (GaussianSplatURPFeature) reads reliably and hands
+                // down here — this is not a guess about which eye is
+                // active, it is the value URP itself is using for the pass.
+                matView = xrViewOverride.Value;
+                matProj = GL.GetGPUProjectionMatrix(xrRawProjOverride.Value, true);
+            }
+            else if (cam.stereoEnabled)
             {
                 var eye = cam.stereoActiveEye == Camera.MonoOrStereoscopicEye.Right
                     ? Camera.StereoscopicEye.Right

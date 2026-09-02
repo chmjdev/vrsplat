@@ -44,8 +44,34 @@ namespace GaussianSplatting.Runtime
                 if (m_Cmb == null)
                     return;
 
+                // Under XR, URP tracks which eye this pass is rendering in
+                // CameraData.xr (multipassId 0/1 under multi-pass) -- the
+                // Camera's own stereoActiveEye is a built-in-render-pipeline
+                // API that URP never populates, so it always reads "Mono"
+                // here and CalcViewData's fallback silently used the LEFT
+                // eye's matrices for BOTH eye passes: zero stereo parallax
+                // for the whole room. xr.GetViewMatrix(0)/GetProjMatrix(0)
+                // return the correct matrices for THIS pass's actual view,
+                // whichever eye it is -- this is what URP itself is using
+                // to render the pass, not a re-derived guess.
+                Matrix4x4? xrView = null, xrProj = null;
+                var xr = renderingData.cameraData.xr;
+                if (xr != null && xr.enabled)
+                {
+                    xrView = xr.GetViewMatrix(0);
+                    xrProj = xr.GetProjMatrix(0);
+                    if (!s_LoggedXRHandoff)
+                    {
+                        s_LoggedXRHandoff = true;
+                        Debug.Log($"[gaussiansplat] URP XR handoff: multipassId={xr.multipassId} " +
+                                  $"viewCount={xr.viewCount} singlePassEnabled={xr.singlePassEnabled} " +
+                                  $"projDiag=({xrProj.Value.m00:F3},{xrProj.Value.m11:F3})");
+                    }
+                }
+
                 // add sorting, view calc and drawing commands for each splat object
-                Material matComposite = GaussianSplatRenderSystem.instance.SortAndRenderSplats(renderingData.cameraData.camera, m_Cmb);
+                Material matComposite = GaussianSplatRenderSystem.instance.SortAndRenderSplats(
+                    renderingData.cameraData.camera, m_Cmb, xrView, xrProj);
 
                 // compose
                 m_Cmb.BeginSample(GaussianSplatRenderSystem.s_ProfCompose);
@@ -57,6 +83,7 @@ namespace GaussianSplatting.Runtime
 
         GSRenderPass m_Pass;
         bool m_HasCamera;
+        static bool s_LoggedXRHandoff;
 
         public override void Create()
         {
