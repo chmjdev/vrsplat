@@ -814,10 +814,36 @@ namespace GaussianSplatting.Runtime
             DestroyImmediate(m_MatDebugBoxes);
         }
 
+        static bool s_LoggedViewState;
+
         internal void CalcViewData(CommandBuffer cmb, Camera cam, Matrix4x4 matrix)
         {
             if (cam.cameraType == CameraType.Preview)
                 return;
+
+            // One-shot diagnostic: this compute stage is the ONLY place
+            // world-to-screen projection happens for a splat (the vertex
+            // shader just expands a quad around the position this writes),
+            // so if the FOV/eye state read here is wrong, a room renders
+            // as a shrunken, correctly-lit "window" surrounded by nothing
+            // rather than filling the headset's real field of view. Logged
+            // once per renderer instance so a real session doesn't spam it.
+            if (!s_LoggedViewState)
+            {
+                s_LoggedViewState = true;
+                Debug.Log($"[gaussiansplat] view state: stereoEnabled={cam.stereoEnabled} " +
+                          $"activeEye={cam.stereoActiveEye} fieldOfView={cam.fieldOfView:F1} " +
+                          $"aspect={cam.aspect:F3} pixelWH={cam.pixelWidth}x{cam.pixelHeight} " +
+                          $"eyeTextureWH={XRSettings.eyeTextureWidth}x{XRSettings.eyeTextureHeight} " +
+                          $"rect={cam.rect} nearFar={cam.nearClipPlane:F3}/{cam.farClipPlane:F1} " +
+                          $"monoProjDiag={cam.projectionMatrix.m00:F3},{cam.projectionMatrix.m11:F3}");
+                if (cam.stereoEnabled)
+                {
+                    var lp = cam.GetStereoProjectionMatrix(Camera.StereoscopicEye.Left);
+                    var rp = cam.GetStereoProjectionMatrix(Camera.StereoscopicEye.Right);
+                    Debug.Log($"[gaussiansplat] stereo proj diag: L=({lp.m00:F3},{lp.m11:F3}) R=({rp.m00:F3},{rp.m11:F3})");
+                }
+            }
 
             var tr = transform;
 
