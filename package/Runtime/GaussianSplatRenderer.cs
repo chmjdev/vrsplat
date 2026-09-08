@@ -14,7 +14,7 @@ using UnityEngine.Profiling;
 using UnityEngine.Rendering;
 using UnityEngine.XR;
 
-namespace GaussianSplatting.Runtime
+namespace VRFlatsCore.Runtime
 {
     class GaussianSplatRenderSystem
     {

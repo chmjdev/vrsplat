@@ -1,17 +1,17 @@
 ﻿// SPDX-License-Identifier: MIT
 
 using System;
-using GaussianSplatting.Runtime;
+using VRFlatsCore.Runtime;
 using UnityEditor;
 using UnityEditor.EditorTools;
 using UnityEngine;
 
-namespace GaussianSplatting.Editor
+namespace VRFlatsCore.Editor
 {
     [EditorToolContext("GaussianSplats", typeof(GaussianSplatRenderer)), Icon(k_IconPath)]
     class GaussianToolContext : EditorToolContext
     {
-        const string k_IconPath = "Packages/org.nesnausk.gaussian-splatting/Editor/Icons/GaussianContext.png";
+        const string k_IconPath = "Packages/com.binteca.vrflatscore/Editor/Icons/GaussianContext.png";
 
         Vector2 m_MouseStartDragPos;
 

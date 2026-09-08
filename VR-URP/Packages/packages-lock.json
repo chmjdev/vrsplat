@@ -381,7 +381,7 @@
         "com.unity.xr.interaction.toolkit": "3.0.3"
       }
     },
-    "org.nesnausk.gaussian-splatting": {
+    "com.binteca.vrflatscore": {
       "version": "file:../../package",
       "depth": 0,
       "source": "local",

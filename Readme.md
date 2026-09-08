@@ -1,6 +1,6 @@
 > **Estate fork — maintained.**
 >
-> This is `chmjdev/vrsplat`, a maintained fork of
+> This is `chmjdev/vrflatscore`, a maintained fork of
 > [ninjamode/Unity-VR-Gaussian-Splatting](https://github.com/ninjamode/Unity-VR-Gaussian-Splatting),
 > which is itself built on
 > [aras-p/UnityGaussianSplatting](https://github.com/aras-p/UnityGaussianSplatting)
@@ -17,15 +17,25 @@
 > - Compiles and passes the consuming project's suite on **Unity 6000.3.22f1**
 >   (both upstreams declare Unity 2022.3), URP, Android/OpenXR target.
 > - Renderer type resolves as
->   `GaussianSplatting.Runtime.GaussianSplatRenderer, GaussianSplatting` —
->   note the assembly is `GaussianSplatting`, not `...Runtime`.
+>   `VRFlatsCore.Runtime.GaussianSplatRenderer, VRFlatsCore` —
+>   note the assembly is `VRFlatsCore`, not `...Runtime`.
 > - Budget on device: upstream reports ~72fps to roughly **400k Gaussians**
 >   on Quest 3. Room-sized captures are realistic; a whole building is not.
 >
-> **Consumed by** `Interactive/unityvrlabs` **and** `Interactive/vrsimulator`
-> via `"org.nesnausk.gaussian-splatting": "file:../../vrsplat/package"` — the
-> suite keeps its repos side by side, the same assumption openvrlabs' sync
-> already makes. `upstream` remote is wired for pulling fixes back down.
+> **Not verified:** the 2026-09-08 rename (namespaces, assembly names and
+> package id) has had no Unity build run against it in this checkout. The
+> compile result above is evidence from before that change.
+>
+> **Consumed by** a sibling Unity checkout via
+> `"com.binteca.vrflatscore": "file:../../vrflatscore/package"` — the suite
+> keeps its repos side by side. `Interactive/vrscanner` consumes the capture
+> tooling under `tools/capture/`, not the Unity package.
+>
+> **No `upstream` remote is configured** — verified 2026-09-08, `origin`
+> only. Since the 2026-09-08 rename the package identity is this fork's own
+> (`com.binteca.vrflatscore`, assembly `VRFlatsCore`), so pulling fixes from
+> either upstream means adding the remote and resolving those renames by
+> hand.
 >
 > **Fork additions (2026-08-31, for vrsimulator):** runtime-created splat
 > data (`GaussianSplatAsset.SetRuntimeData` — load a PLY in a *player*, no

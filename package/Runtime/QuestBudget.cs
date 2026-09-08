@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
-// Estate fork (chmjdev/vrsplat): ROADMAP item 1 — a documented Quest budget,
+// Estate fork (chmjdev/vrflatscore): ROADMAP item 1 — a documented Quest budget,
 // and a guard that speaks up at import time instead of letting the headset
 // deliver the news late.
 
-namespace GaussianSplatting.Runtime
+namespace VRFlatsCore.Runtime
 {
     /// <summary>
     /// The splat budget for the target device, stated once with its

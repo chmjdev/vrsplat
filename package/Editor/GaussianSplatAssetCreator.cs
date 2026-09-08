@@ -4,8 +4,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using GaussianSplatting.Editor.Utils;
-using GaussianSplatting.Runtime;
+using VRFlatsCore.Editor.Utils;
+using VRFlatsCore.Runtime;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
@@ -15,7 +15,7 @@ using UnityEditor;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 
-namespace GaussianSplatting.Editor
+namespace VRFlatsCore.Editor
 {
     [BurstCompile]
     public class GaussianSplatAssetCreator : EditorWindow

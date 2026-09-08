@@ -1,4 +1,4 @@
-# vrsplat — maintenance roadmap
+# vrflatscore — maintenance roadmap
 
 Why this fork exists, and what we intend to carry in it. See `Readme.md`
 for the attribution and licence position (MIT, unchanged).

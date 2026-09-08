@@ -7,7 +7,7 @@ using UnityEditor;
 #endif
 using UnityEngine;
 
-namespace GaussianSplatting.Runtime
+namespace VRFlatsCore.Runtime
 {
     public class GaussianCutout : MonoBehaviour
     {

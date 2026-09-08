@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 
-using GaussianSplatting.Runtime;
+using VRFlatsCore.Runtime;
 using UnityEditor.EditorTools;
 using UnityEngine;
 
-namespace GaussianSplatting.Editor
+namespace VRFlatsCore.Editor
 {
     abstract class GaussianTool : EditorTool
     {

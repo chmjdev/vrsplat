@@ -5,15 +5,15 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
-using GaussianSplatting.Runtime;
+using VRFlatsCore.Runtime;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Mathematics;
 using UnityEditor;
 using UnityEditor.EditorTools;
 using UnityEngine;
-using GaussianSplatRenderer = GaussianSplatting.Runtime.GaussianSplatRenderer;
+using GaussianSplatRenderer = VRFlatsCore.Runtime.GaussianSplatRenderer;
 
-namespace GaussianSplatting.Editor
+namespace VRFlatsCore.Editor
 {
     [CustomEditor(typeof(GaussianSplatRenderer))]
     [CanEditMultipleObjects]
