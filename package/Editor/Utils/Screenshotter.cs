@@ -5,7 +5,7 @@ using UnityEngine;
 using UnityEditor;
 using Debug = UnityEngine.Debug;
 
-namespace GaussianSplatting.Editor.Utils
+namespace VRFlatsCore.Editor.Utils
 {
     public class ScreenshotterGUI : EditorWindow
     {

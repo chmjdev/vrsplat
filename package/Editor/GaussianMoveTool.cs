@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 
-using GaussianSplatting.Runtime;
+using VRFlatsCore.Runtime;
 using UnityEditor;
 using UnityEditor.EditorTools;
 using UnityEngine;
 
-namespace GaussianSplatting.Editor
+namespace VRFlatsCore.Editor
 {
     [EditorTool("Gaussian Move Tool", typeof(GaussianSplatRenderer), typeof(GaussianToolContext))]
     class GaussianMoveTool : GaussianTool

@@ -1,4 +1,4 @@
-using GaussianSplatting.Runtime;
+using VRFlatsCore.Runtime;
 using System.Collections;
 using System.Collections.Generic;
 using TMPro;

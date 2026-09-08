@@ -18,10 +18,10 @@ as a **separate process on a remote machine and consumes the files it
 writes**. Program output is not a derivative work, so that arrangement is
 clean.
 
-Do not link, vendor, or copy LichtFeld source into `vrsplat` or into
-`unityvrlabs` — that would pull GPLv3 across an MIT package and a shipped
-application. Anything the pipeline needs from it goes over SSH, never over
-a compiler.
+Do not link, vendor, or copy LichtFeld source into `vrflatscore` or into
+any application that ships it — that would pull GPLv3 across an MIT
+package and a shipped application. Anything the pipeline needs from it
+goes over SSH, never over a compiler.
 
 ## Getting LichtFeld onto the box
 
@@ -67,9 +67,9 @@ A room fits; a building does not.
 Estate convention: every variable is project-prefixed, and none are
 committed.
 
-    VRSPLAT_REMOTE_HOST     user@host of the GPU box
-    VRSPLAT_REMOTE_KEY      ssh key path            (optional)
-    VRSPLAT_REMOTE_WORKDIR  remote scratch dir      (default ~/vrsplat-work)
+    VRFLATSCORE_REMOTE_HOST     user@host of the GPU box
+    VRFLATSCORE_REMOTE_KEY      ssh key path            (optional)
+    VRFLATSCORE_REMOTE_WORKDIR  remote scratch dir      (default ~/vrflatscore-work)
 
 The GPU box is **rented, ephemeral compute — not estate infrastructure**.
 It gets no `jcds.config` entry and no DNS name; JCDS supervises services,

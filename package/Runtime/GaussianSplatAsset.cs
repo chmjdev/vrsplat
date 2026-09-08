@@ -13,7 +13,7 @@ using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Serialization;
 
-namespace GaussianSplatting.Runtime
+namespace VRFlatsCore.Runtime
 {
     public class GaussianSplatAsset : ScriptableObject
     {
@@ -267,7 +267,7 @@ namespace GaussianSplatting.Runtime
         public CameraInfo[] cameras => m_Cameras;
 
         // ------------------------------------------------------------------
-        // Estate fork (chmjdev/vrsplat): runtime-created splat data.
+        // Estate fork (chmjdev/vrflatscore): runtime-created splat data.
         //
         // The serialized path above stores splat data in TextAsset blobs,
         // which only the Editor importer can create — so a player (desktop

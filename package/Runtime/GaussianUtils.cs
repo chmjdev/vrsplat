@@ -2,7 +2,7 @@
 
 using Unity.Mathematics;
 
-namespace GaussianSplatting.Runtime
+namespace VRFlatsCore.Runtime
 {
     public static class GaussianUtils
     {

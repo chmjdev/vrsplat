@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using GaussianSplatting.Runtime;
+using VRFlatsCore.Runtime;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
@@ -15,7 +15,7 @@ using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 
 
-namespace GaussianSplatting.Runtime
+namespace VRFlatsCore.Runtime
 {
     public class GaussianImageCreator
     {

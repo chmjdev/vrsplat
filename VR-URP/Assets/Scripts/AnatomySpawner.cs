@@ -1,4 +1,4 @@
-using GaussianSplatting.Runtime;
+using VRFlatsCore.Runtime;
 using JetBrains.Annotations;
 using System;
 using System.Collections;

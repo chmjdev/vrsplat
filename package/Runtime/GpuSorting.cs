@@ -5,7 +5,7 @@ using UnityEngine;
 using UnityEngine.Assertions;
 using UnityEngine.Rendering;
 
-namespace GaussianSplatting.Runtime
+namespace VRFlatsCore.Runtime
 {
     // GPU (uint key, uint payload) 8 bit-LSD radix sort, using reduce-then-scan
     // Copyright Thomas Smith 2024, MIT license

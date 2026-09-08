@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using GaussianSplatting.Runtime;
+using VRFlatsCore.Runtime;
 using UnityEngine;
 using UnityEngine.XR;
 using Debug = UnityEngine.Debug;
