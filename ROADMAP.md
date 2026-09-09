@@ -91,14 +91,45 @@ right preset for the Quest budget.
    The lesson, kept here because it cost a day: the driver going quiet is
    not evidence that a binding arrived. Read the buffer back.
 
-1c. **RenderGraph port of `GaussianSplatURPFeature`.**
+1c. **RenderGraph port of `GaussianSplatURPFeature`. — DONE 2026-09-09**
    Unity 6 URP runs RenderGraph by default and the feature's `GSRenderPass`
-   only implements the legacy `Execute` path, so it silently draws nothing
-   there — the player log says exactly this (observed in vrsimulator's
-   first smoke run, 2026-08-31). vrsimulator ships with URP **Compatibility
-   Mode (RenderGraph disabled)** as the workaround; the real fix is
-   implementing `RecordRenderGraph` (upstream aras-p has since done this —
-   candidate for pulling down via the `upstream` remote).
+   implemented only the legacy `Execute` path, so it silently drew nothing
+   there — the player log said exactly this (observed in vrsimulator's
+   first smoke run, 2026-08-31), and Compatibility Mode (RenderGraph
+   disabled) was the workaround every consuming project had to carry.
+
+   `GSRenderPass.RecordRenderGraph` now exists, ported from
+   `upstream-aras/main` — and the remote to port it from is itself new
+   (`docs/upstream.md`; before 2026-09-09 this repository had `origin`
+   only). It is an **unsafe pass**, which is what hands back a real
+   `CommandBuffer` for the sort dispatches and the `DrawProcedural`, and it
+   follows upstream on every point where upstream ships a working choice:
+   `CreateRenderGraphTexture`, `AllowPassCulling(false)` (nothing downstream
+   reads the target by handle — the composite reaches it through the
+   `_GaussianSplatRT` global — so the graph would otherwise cull the pass,
+   which looks identical to not implementing it), the `SetGlobalTexture`,
+   and the camera depth declared **read-only** because both splat shaders
+   are ZWrite Off. What is ours and must survive any future port: the XR
+   per-eye matrix overrides, which upstream's version does not have, and the
+   retained legacy `Execute`/`OnCameraSetup` overrides for URP 14 and for
+   Compatibility Mode projects.
+
+   **Two traps, both silent, both cost a run to find:**
+   - The new code is behind a `GS_URP_RENDERGRAPH` version define on URP
+     `17.0.0`. The first attempt wrote the range as `[17.0.0,)`, which Unity
+     rejects with `ExpressionNotValidException` — its syntax has no
+     unbounded-range form, a bare version means "that version or newer". The
+     result was a clean build with the RenderGraph code silently compiled
+     out. The source was right and the manifest was wrong, and nothing
+     failed.
+   - Overriding an `[Obsolete]` member raises **CS0672**, not CS0618. The
+     pragma named the wrong warning and suppressed nothing.
+
+   Neither would have been caught by reading. Both were caught by
+   `tools/verify/run.sh`, which checks the compiled type by reflection —
+   `RecordRenderGraph` present, `PassData` present, `Execute` still present.
+   **Still unmeasured:** nothing here renders a frame. That the pass is
+   recorded is verified; that it draws correctly on a Quest 3 is not.
 
 2. **SOG / compressed-format import.**
    PlayCanvas' SOG format reports 15–20× smaller than PLY. It is
@@ -116,6 +147,14 @@ right preset for the Quest budget.
    getting a raw capture down to budget. Document the exact invocation we
    use rather than telling authors to "decimate".
 
+   Two corrections, 2026-09-09: it is **PlayCanvas'** tool, not upstream's —
+   verified absent from `upstream-aras/main`, so adding the remote does not
+   bring it. And no invocation has been run here, so writing one down would
+   be invention rather than documentation. What the guard already gives
+   authors is the verdict and the route (`QuestBudget.Describe`): crop with
+   cutouts, trim with the edit tools, export modified PLY, re-import at
+   `VeryLow`.
+
 ## Ground rules for this fork
 
 - **Stay mergeable.** Prefer additive changes; keep upstream's file layout
@@ -123,3 +162,8 @@ right preset for the Quest budget.
 - **MIT preserved.** Original copyright and attribution stay untouched.
 - **Measured, not assumed.** Performance claims in this repo carry the
   device and the method, or they are labelled as upstream's numbers.
+- **Compatibility claims are re-runnable.** `./tools/verify/run.sh` compiles
+  the package in a throwaway Unity project and checks the declared identities
+  and the runtime input handling by reflection; `docs/verification.md` says
+  what a pass does and does not mean. A claim that survives a change without
+  being re-run is evidence about the state before the change.

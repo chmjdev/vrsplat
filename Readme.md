@@ -13,35 +13,61 @@
 > tested at all on mobile/web". Rather than depend on that unmaintained,
 > we maintain this fork and carry the fixes ourselves.
 >
-> **Verified here, not assumed:**
-> - Compiles and passes the consuming project's suite on **Unity 6000.3.22f1**
->   (both upstreams declare Unity 2022.3), URP, Android/OpenXR target.
-> - Renderer type resolves as
->   `VRFlatsCore.Runtime.GaussianSplatRenderer, VRFlatsCore` —
->   note the assembly is `VRFlatsCore`, not `...Runtime`.
-> - Budget on device: upstream reports ~72fps to roughly **400k Gaussians**
->   on Quest 3. Room-sized captures are realistic; a whole building is not.
+> **Verified here, not assumed — re-run it with `./tools/verify/run.sh`:**
+> - **2026-09-09, Unity 6000.3.22f1 + URP 17.3.0: zero compile errors**, and by
+>   reflection over the loaded assemblies — the type string
+>   `VRFlatsCore.Runtime.GaussianSplatRenderer, VRFlatsCore` resolves (note the
+>   assembly is `VRFlatsCore`, not `...Runtime`), both assemblies carry their
+>   documented names, every runtime namespace is `VRFlatsCore.*`, and the
+>   package registers as `com.binteca.vrflatscore`. **This is the first build
+>   run against the 2026-09-08 rename**; until then every claim here predated it.
+> - Runtime splat buffers are refused when they do not match the asset's
+>   declared formats — six behaviour assertions, all passing. See `SECURITY.md`.
+> - What a pass does **not** cover: no frame is rendered and no APK is built, so
+>   nothing here is a device test; and it is evidence about that editor and URP
+>   version only. `docs/verification.md` is the full statement.
 >
-> **Not verified:** the 2026-09-08 rename (namespaces, assembly names and
-> package id) has had no Unity build run against it in this checkout. The
-> compile result above is evidence from before that change.
+> **Not verified:**
+> - **The Quest budget is upstream's number, not ours** — ~72fps to roughly
+>   **400k Gaussians** on Quest 3. Room-sized captures are realistic; a whole
+>   building is not. `QuestBudget.MeasuredOnOurDevice` stays `false` until a
+>   capture is measured on our own device.
+> - **`package.json` declares Unity `2022.3` and that minimum has never been
+>   built in this fork** — it is inherited from upstream. The legacy URP
+>   `Execute` path is kept for it, and is itself unbuilt on that version.
+> - Single Pass Instanced stereo — see `ROADMAP.md` 1e. The suite renders
+>   Multi-pass.
 >
-> **Consumed by** a sibling Unity checkout via
-> `"com.binteca.vrflatscore": "file:../../vrflatscore/package"` — the suite
-> keeps its repos side by side. `Interactive/vrscanner` consumes the capture
-> tooling under `tools/capture/`, not the Unity package.
+> **Consumed as** `"com.binteca.vrflatscore": "file:.../vrflatscore/package"` —
+> a relative path, which cannot be version-pinned: a consumer takes whatever is
+> in the checkout beside it. `CHANGELOG.md` and the `version` field are what
+> make "which vrflatscore was that built against?" answerable at all.
+> `VR-URP/` in this repository consumes the package the same way, and is pinned
+> to Unity 2022.3.51f1 — not the editor version any of the verification above
+> used. Checked 2026-09-09: **no sibling checkout currently resolves the Unity
+> package**; the sibling that is present consumes the capture tooling under
+> `tools/capture/` instead.
 >
-> **No `upstream` remote is configured** — verified 2026-09-08, `origin`
-> only. Since the 2026-09-08 rename the package identity is this fork's own
-> (`com.binteca.vrflatscore`, assembly `VRFlatsCore`), so pulling fixes from
-> either upstream means adding the remote and resolving those renames by
-> hand.
+> **Upstream remotes were added 2026-09-09**; before that this repository had
+> `origin` only, so no upstream fix would ever have surfaced here.
+> `upstream` (ninjamode) is a true git ancestor — 17 ahead, 0 behind.
+> `upstream-aras` (aras-p, where fixes actually land now) shares **no history at
+> all**, so porting from it is manual by construction. Remotes do not travel
+> with a clone: **`docs/upstream.md`** carries the two `git remote add` lines,
+> the rename map, and what this fork carries that a careless port would erase.
 >
-> **Fork additions (2026-08-31, for vrsimulator):** runtime-created splat
-> data (`GaussianSplatAsset.SetRuntimeData` — load a PLY in a *player*, no
-> Editor importer needed), and `#if UNITY_EDITOR` guards on the Runtime
-> assembly's four bare `using UnityEditor;` lines, which previously broke
-> every player build that included this package. See `ROADMAP.md` item 1b.
+> **Fork additions:** runtime-created splat data
+> (`GaussianSplatAsset.SetRuntimeData` — build a splat asset from packed bytes
+> in a *player*, no Editor importer needed, so a capture made after the build is
+> still renderable; the caller does the parsing, and since 2026-09-09 its
+> buffers are checked before they reach the GPU), `#if UNITY_EDITOR` guards on
+> the Runtime assembly's four bare `using UnityEditor;` lines which previously
+> broke every player build that included this package, `QuestBudget` and its
+> import-time guard, the XR per-eye matrix handoff, and `RecordRenderGraph` so
+> the URP feature draws at all on Unity 6. See `CHANGELOG.md` and `ROADMAP.md`.
+>
+> **Also here:** `SECURITY.md` (posture, findings and where each stands),
+> `CHANGELOG.md`, `docs/verification.md`, `docs/upstream.md`.
 
 ---
 

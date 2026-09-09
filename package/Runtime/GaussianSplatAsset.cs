@@ -293,9 +293,48 @@ namespace VRFlatsCore.Runtime
         public bool HasRuntimeData => m_RuntimeLayerData != null && m_RuntimeLayerData.Count > 0;
         public IReadOnlyList<RuntimeLayerData> RuntimeLayers => m_RuntimeLayerData;
 
+        /// <summary>
+        /// The runtime colour blob is raw float4 per splat, NOT the packed
+        /// <see cref="colorFormat"/>. GaussianImageCreator.CreateColorData
+        /// does that conversion at load time and derives the texture size from
+        /// the array's own length, so <see cref="CalcColorDataSize"/> — which
+        /// describes the converted texture — is deliberately not what a
+        /// runtime colour buffer is measured against.
+        /// </summary>
+        public const int kRuntimeColorStride = 16; // sizeof(float4)
+
+        /// <summary>
+        /// Hands one layer's raw splat bytes to the asset. The arrays belong to
+        /// the asset from here on: <see cref="DisposeRuntimeData"/> releases
+        /// them and the caller must not dispose them itself.
+        ///
+        /// <para><b><see cref="Initialize"/> must have been called first.</b>
+        /// The byte layout of every buffer is decided by the formats and the
+        /// per-layer splat counts declared there, and this method checks the
+        /// arrays against them.</para>
+        ///
+        /// <para>The check is the point. These buffers go straight to the GPU
+        /// as raw and structured buffers and as a colour texture, with no
+        /// further bounds information. A buffer of the wrong length for its
+        /// format is not a rendering artefact — it is an out-of-bounds read in
+        /// a shipped player, and on Quest's Vulkan backend that arrives as a
+        /// SIGSEGV in libunity milliseconds after the draw, with nothing in the
+        /// log to say why (ROADMAP 1d records a day spent on exactly that).
+        /// Refusing here, naming the buffer and both numbers, is the whole of
+        /// the difference. Note what this does and does not cover: the package
+        /// never parses PLY at runtime — the caller packs these buffers — so
+        /// this is a structural check that whatever the caller produced is
+        /// self-consistent, not a hardened parser. It is nonetheless the only
+        /// boundary in a released build where externally-derived splat data
+        /// meets the GPU.</para>
+        /// </summary>
+        /// <exception cref="InvalidOperationException">Initialize has not run, or declares no such layer.</exception>
+        /// <exception cref="ArgumentException">A buffer is missing, or its length does not match the declared format and splat count.</exception>
         public void SetRuntimeData(byte layer, NativeArray<byte> chunkData, NativeArray<byte> posData,
             NativeArray<byte> otherData, NativeArray<byte> colorData, NativeArray<byte> shData)
         {
+            ValidateRuntimeLayer(layer, chunkData, posData, otherData, colorData, shData);
+
             m_RuntimeLayerData ??= new List<RuntimeLayerData>();
             m_RuntimeLayerData.Add(new RuntimeLayerData
             {
@@ -306,6 +345,67 @@ namespace VRFlatsCore.Runtime
                 colorData = colorData,
                 shData = shData,
             });
+        }
+
+        /// <summary>
+        /// Checks one runtime layer's buffers against the formats and splat
+        /// count <see cref="Initialize"/> declared. Public so a loader can ask
+        /// before it commits ownership of the arrays.
+        /// </summary>
+        public void ValidateRuntimeLayer(byte layer, NativeArray<byte> chunkData, NativeArray<byte> posData,
+            NativeArray<byte> otherData, NativeArray<byte> colorData, NativeArray<byte> shData)
+        {
+            if (m_SplatCount <= 0 || m_LayerInfo == null || m_LayerInfo.Count == 0)
+                throw new InvalidOperationException(
+                    $"{name}: SetRuntimeData(layer {layer}) called before Initialize(). The buffer layout is decided by the " +
+                    "formats and per-layer splat counts Initialize declares, so it can be neither checked nor used before then.");
+
+            int layerSplats = -1;
+            foreach (var li in m_LayerInfo)
+            {
+                if (li.x == layer) { layerSplats = li.y; break; }
+            }
+            if (layerSplats < 0)
+                throw new InvalidOperationException(
+                    $"{name}: SetRuntimeData(layer {layer}) but Initialize() declared no such layer.");
+
+            if (!posData.IsCreated || !otherData.IsCreated || !colorData.IsCreated)
+                throw new ArgumentException(
+                    $"{name} layer {layer}: posData, otherData and colorData are all required " +
+                    $"(created: pos={posData.IsCreated}, other={otherData.IsCreated}, colour={colorData.IsCreated}).");
+
+            CheckRuntimeLength(layer, "posData", posData.Length,
+                CalcPosDataSize(layerSplats, m_PosFormat), $"{m_PosFormat} position", layerSplats);
+            CheckRuntimeLength(layer, "otherData", otherData.Length,
+                CalcOtherDataSize(layerSplats, m_ScaleFormat), $"Norm10 rotation + {m_ScaleFormat} scale", layerSplats);
+            CheckRuntimeLength(layer, "colorData", colorData.Length,
+                (long)layerSplats * kRuntimeColorStride, "raw float4 colour", layerSplats);
+
+            if (shData.IsCreated)
+            {
+                if (m_SHFormat >= SHFormat.Cluster64k)
+                    throw new ArgumentException(
+                        $"{name} layer {layer}: SH format {m_SHFormat} is a clustered palette, which is stored once per asset " +
+                        "as a serialized TextAsset and has no runtime path. Initialize() with a per-splat SH format " +
+                        "(Float32, Float16, Norm11 or Norm6) for a runtime-created asset.");
+                CheckRuntimeLength(layer, "shData", shData.Length,
+                    CalcSHDataSize(layerSplats, m_SHFormat), $"{m_SHFormat} spherical harmonics", layerSplats);
+            }
+
+            if (chunkData.IsCreated)
+                CheckRuntimeLength(layer, "chunkData", chunkData.Length,
+                    CalcChunkDataSize(layerSplats), "chunk bounds", layerSplats);
+        }
+
+        void CheckRuntimeLength(byte layer, string bufferName, long actual, long expected, string what, int layerSplats)
+        {
+            if (actual == expected)
+                return;
+            throw new ArgumentException(
+                $"{name} layer {layer}: {bufferName} is {actual:N0} bytes, expected {expected:N0} " +
+                $"for {layerSplats:N0} splats of {what}. The asset's declared formats are " +
+                $"pos={m_PosFormat}, scale={m_ScaleFormat}, colour=raw float4, sh={m_SHFormat}; " +
+                "a runtime buffer that disagrees with them is read out of bounds on the GPU.");
         }
 
         public void DisposeRuntimeData()
