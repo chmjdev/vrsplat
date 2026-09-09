@@ -67,6 +67,82 @@ public static class PackageVerify
             }
 
             Check("QuestBudget present", runtime.GetTypes().Any(x => x.Name == "QuestBudget"), "QuestBudget");
+
+            // ROADMAP item 3 -- distance-based LOD ladder. Written and
+            // committed without ever compiling (no working Unity process was
+            // available in that session; see CHANGELOG.md). These checks are
+            // this fork's first actual evidence about it, one way or the
+            // other.
+            var rendererType = runtime.GetTypes().FirstOrDefault(x => x.Name == "GaussianSplatRenderer");
+            if (rendererType != null)
+            {
+                bool hasLodEnabled = rendererType.GetField("m_LodEnabled", BindingFlags.Public | BindingFlags.Instance) != null;
+                bool hasLodDistances = rendererType.GetField("m_LayerLodDistances", BindingFlags.Public | BindingFlags.Instance) != null;
+                bool hasLodEntryType = rendererType.GetNestedType("LayerLodEntry", BindingFlags.Public) != null;
+                Check("GaussianSplatRenderer LOD fields present (m_LodEnabled, m_LayerLodDistances, LayerLodEntry)",
+                      hasLodEnabled && hasLodDistances && hasLodEntryType,
+                      $"m_LodEnabled={hasLodEnabled} m_LayerLodDistances={hasLodDistances} LayerLodEntry={hasLodEntryType}");
+            }
+        }
+
+        // ROADMAP item 2 -- SOG import. Written and committed without ever
+        // compiling (no working Unity process was available in that
+        // session; see CHANGELOG.md). Checks that the type and the methods
+        // this fork has verified formulas for are actually present in the
+        // compiled editor assembly -- it does NOT check that they produce
+        // correct output (no WebP decoder is available to feed them real
+        // data; DequantizeQuat is deliberately unimplemented, see
+        // SogFileReader.cs).
+        static void SogImportCheck()
+        {
+            var editor = AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(a => a.GetName().Name == "VRFlatsCoreEditor");
+            if (editor == null)
+            {
+                Check("SogFileReader present (VRFlatsCoreEditor loaded)", false, "VRFlatsCoreEditor assembly absent");
+                return;
+            }
+            var sogType = editor.GetTypes().FirstOrDefault(x => x.Name == "SogFileReader");
+            Check("SogFileReader type compiled in", sogType != null, sogType?.FullName ?? "absent");
+            if (sogType == null)
+                return;
+
+            var methods = sogType.GetMethods(BindingFlags.Public | BindingFlags.Static).Select(m => m.Name).ToArray();
+            Check("SogFileReader declares ReadMeta/Unlog/DequantizeScale/DequantizeSh0/DequantizeQuat",
+                  methods.Contains("ReadMeta") && methods.Contains("Unlog") &&
+                  methods.Contains("DequantizeScale") && methods.Contains("DequantizeSh0") &&
+                  methods.Contains("DequantizeQuat"),
+                  string.Join(", ", methods));
+
+            bool decoderInterface = editor.GetTypes().Any(x => x.Name == "ISogTextureDecoder");
+            Check("ISogTextureDecoder seam present", decoderInterface, decoderInterface ? "present" : "absent");
+
+            // DequantizeQuat was ported from @playcanvas/splat-transform's own
+            // shipped source (see SogFileReader.cs header) but never run under
+            // Unity's own Mathf/Quaternion -- this is the first actual check
+            // of that port, not of the formula itself. A "smallest-three"
+            // decode must always produce a unit quaternion by construction;
+            // that is what is checked here, across all four maxComp branches
+            // (tag 252..255), not that the result matches any specific
+            // reference value.
+            var dequantizeQuat = sogType.GetMethod("DequantizeQuat", BindingFlags.Public | BindingFlags.Static);
+            if (dequantizeQuat != null)
+            {
+                for (byte tag = 252; tag <= 255; tag++)
+                {
+                    try
+                    {
+                        var q = (UnityEngine.Quaternion)dequantizeQuat.Invoke(null, new object[] { (byte)37, (byte)200, (byte)90, tag });
+                        float mag = Mathf.Sqrt(q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w);
+                        Check($"DequantizeQuat(tag={tag}) returns a unit quaternion",
+                              Mathf.Abs(mag - 1f) < 0.001f,
+                              $"|q|={mag:F6} q=({q.x:F4},{q.y:F4},{q.z:F4},{q.w:F4})");
+                    }
+                    catch (Exception e)
+                    {
+                        Check($"DequantizeQuat(tag={tag}) returns a unit quaternion", false, e.GetType().Name + ": " + e.Message);
+                    }
+                }
+            }
         }
 
         var pkg = UnityEditor.PackageManager.PackageInfo.GetAllRegisteredPackages()
@@ -75,6 +151,7 @@ public static class PackageVerify
               pkg == null ? "absent" : $"{pkg.name}@{pkg.version} source={pkg.source} path={pkg.resolvedPath}");
 
         RuntimeDataValidation();
+        SogImportCheck();
 
         Debug.Log($"[verify] RESULT {(s_Fail == 0 ? "ALL PASS" : s_Fail + " FAILURE(S)")}");
         EditorApplication.Exit(s_Fail == 0 ? 0 : 1);

@@ -63,6 +63,16 @@ right preset for the Quest budget.
    the telemetry in vr-session-result. Multi-pass costs a second sort per
    frame unless `m_CenterEyeOnly` is set.
 
+   **Scoped, not attempted, 2026-09-09.** Read `RenderGaussianSplats.shader`,
+   `GaussianComposite.shader`, `GaussianSplatURPFeature.cs`: the change needs
+   stereo-instancing macros on the vertex/compute stages, `_GaussianSplatRT`
+   as a `Texture2DArray` under SPI, and `CalcViewData` dispatching per-eye
+   (doubling the view buffer, splitting `SV_InstanceID` into eye+splat
+   index) — that last part is where a confident-looking mistake is easiest.
+   Not written: no Unity process was available to compile or run it this
+   session (0.11.0, `CHANGELOG.md`), and this file's own item 1d is a record
+   of what shipping an unverified VR stereo "fix" here has cost before.
+
 1d. **Vulkan/Quest draw bindings. — RETRACTED 2026-09-01**
    The 2026-08-31 entry claimed MaterialPropertyBlock buffer bindings were
    dropped on Vulkan and "fixed" it by also binding everything as
@@ -131,29 +141,96 @@ right preset for the Quest budget.
    **Still unmeasured:** nothing here renders a frame. That the pass is
    recorded is verified; that it draws correctly on a Quest 3 is not.
 
-2. **SOG / compressed-format import.**
+2. **SOG / compressed-format import. — SCAFFOLDING ADDED 2026-09-09, UNVERIFIED**
    PlayCanvas' SOG format reports 15–20× smaller than PLY. It is
    web-oriented, so this is real importer work rather than a flag, but the
    size win matters: captures ship inside the APK's StreamingAssets, and
    load time and download size are both real UAT costs.
 
-3. **An LOD ladder.**
-   AURA-style progressive levels, so a room can hold detail near the
-   trainee and shed it at distance instead of being decimated uniformly.
-   This is what would let a capture be larger than the flat budget allows.
+   `package/Editor/Utils/SogFileReader.cs`: `meta.json` schema (transcribed
+   from the published spec, then **cross-checked 2026-09-09 against a real
+   generated file** — see item 4 below for how `@playcanvas/splat-transform`
+   got installed and run this session) plus the position/scale/SH0/quat
+   dequantization formulas. The quaternion formula (`DequantizeQuat`,
+   "smallest-three" packing) was read directly out of that npm package's own
+   shipped source once it was actually available, closing what was
+   initially an unresolved gap in the published spec. Still not
+   implemented, and now correctly scoped as solvable rather than unknown:
+   **WebP pixel decoding in the C# importer itself** — Unity has no native
+   WebP path, and this machine still has no `dwebp`/`cwebp`/libwebp/
+   ImageMagick to shell out to, but `@playcanvas/splat-transform` does ship
+   a working WebP codec, proven to run this session, so the concrete next
+   step is an Editor-only external-process call into it (or an equivalent
+   .NET libwebp binding), not an unsolved problem. `ISogTextureDecoder` is
+   the seam. Not wired into `GaussianSplatAssetCreator`'s UI. None of it has
+   been compiled — see `CHANGELOG.md` 0.11.0's environment finding.
 
-4. **Author-facing decimation guidance.**
+3. **An LOD ladder. — ADDED 2026-09-09, UNVERIFIED**
+   So a room can hold detail near the trainee and shed it at distance
+   instead of being decimated uniformly. This is what would let a capture be
+   larger than the flat budget allows.
+
+   Note, 2026-09-09: an earlier draft of this item named a specific "AURA"
+   method as the model to follow. That reference could not be verified — a
+   search for it returned no matching paper, only an unrelated web-search
+   summary that named implementation details (a `pip install aura-splat`
+   package) not backed by any of the actual pages the search returned, which
+   reads as the search tool fabricating rather than finding something. What
+   was built instead (`GaussianSplatRenderer.m_LodEnabled` /
+   `m_LayerLodDistances`) is a distance-based ladder in the general spirit
+   this item's own opening line describes, reusing the existing multi-layer
+   asset format (one layer = one LOD rung, given a max camera distance) —
+   not a reproduction of any specific external method. Uncompiled; see
+   `CHANGELOG.md` 0.11.0.
+
+4. **Author-facing decimation guidance. — REAL INVOCATION RUN 2026-09-09**
    `SplatTransform` (converts formats, emits LOD) is the practical tool for
    getting a raw capture down to budget. Document the exact invocation we
    use rather than telling authors to "decimate".
 
-   Two corrections, 2026-09-09: it is **PlayCanvas'** tool, not upstream's —
-   verified absent from `upstream-aras/main`, so adding the remote does not
-   bring it. And no invocation has been run here, so writing one down would
-   be invention rather than documentation. What the guard already gives
-   authors is the verdict and the route (`QuestBudget.Describe`): crop with
-   cutouts, trim with the edit tools, export modified PLY, re-import at
-   `VeryLow`.
+   Corrected, 2026-09-09: it is **PlayCanvas'** tool
+   (`@playcanvas/splat-transform` on npm), not upstream's — verified absent
+   from `upstream-aras/main`, so adding the remote does not bring it.
+
+   **First real run, same date, later session.** This machine had no
+   Node.js; a portable Node v24.21.0 LTS (darwin-arm64, checksum verified
+   against `nodejs.org`'s published `SHASUMS256.txt`) was installed into the
+   *notebook's own sandboxed workspace* — **not into this repository, and
+   not onto whatever machine actually builds `VR-URP/`** — followed by
+   `npm install @playcanvas/splat-transform`, which resolved v3.4.2
+   (commit `0cb47cd`), 8 packages, 0 vulnerabilities. It runs and its
+   `--help`/`--info`/`--stats` output is real, captured output — not
+   documentation guesswork. No real estate capture was available to this
+   session to decimate (no `.ply` exists anywhere in this checkout — the
+   bundled `VR-URP/Assets/GS Assets/` are already Unity's post-import
+   `.bytes` format), so the actual invocation below was run against a
+   **synthetic** 20,000-splat PLY (random positions/colours, degenerate
+   identity rotations, generated in Python for this test) — every number is
+   real, but none of it is a statement about how a real capture decimates:
+
+   ```
+   $ splat-transform test_input.ply -d 50% test_output_50.ply -w
+   ▸ [2/2] Output test_output_50.ply
+     ▸ [1/1] Decimate generation
+       · 10K gaussians · 0 SH bands
+   done in 0.399s  [peak cpu=182.7MB gpu=9.2MB]
+   ```
+   20,000 → 10,000 gaussians exactly (`-d 50%`), file size 1,360,415 →
+   680,415 bytes exactly halved (uniform decimation, no SH compression in
+   this synthetic file). `-d` (`--decimate`) is uniform-rate and cheaper;
+   `--decimate-adaptive` allocates removal by local error and the tool's own
+   `--help` recommends it for mixed-scale content ("skies") over `-d`'s
+   recommended use ("uniform texture, single objects, snow") — a real
+   capture's own scale mix would decide which one an author should actually
+   use, which this session cannot state without a real capture to test
+   against.
+
+   The same install also fully closed the ROADMAP item 2 SOG gap on the
+   quaternion formula — see `CHANGELOG.md` and `SogFileReader.cs`.
+
+   What the guard already gives authors, independent of the above: the
+   verdict and the route (`QuestBudget.Describe`): crop with cutouts, trim
+   with the edit tools, export modified PLY, re-import at `VeryLow`.
 
 ## Ground rules for this fork
 

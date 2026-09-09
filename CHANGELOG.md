@@ -8,6 +8,107 @@ side. Bump the version with any change that a consumer could notice.
 
 Dates are the estate's, and every "verified" below names how.
 
+## 0.11.0 — 2026-09-09
+
+**Everything in this release is source-only and UNVERIFIED.** The session that
+wrote it had no working Unity process at all: `tools/verify/run.sh` needs the
+same Unity Editor binary this session tried and failed to launch (see
+"Environment finding" below), so none of it has been compiled, let alone run.
+This breaks from every earlier entry in this file, which only records
+`./tools/verify/run.sh` results. Treat every item below as a diff to review
+and verify, not as a working feature.
+
+### Added, unverified
+
+- **Distance-based LOD ladder** (ROADMAP item 3), `GaussianSplatRenderer.m_LodEnabled`
+  / `m_LayerLodDistances` / `LayerLodEntry`. Reuses the existing multi-layer
+  asset format rather than a new one: a layer becomes one LOD rung by giving
+  it a maximum camera distance, and `UpdateLod()` only calls
+  `UpdateRessources()` (which re-uploads every active layer's GPU buffers) on
+  an actual transition between rungs, not every frame. Only behaves as a real
+  LOD ladder if the source capture's layers were authored as nested detail
+  levels; this is author responsibility, same as the layer format always was.
+  `tools/verify/PackageVerify.cs` now checks the three symbols are compiled
+  in, by reflection, same pattern as every other identity check there.
+- **SOG import scaffolding** (ROADMAP item 2), `package/Editor/Utils/SogFileReader.cs`.
+  `meta.json` schema and validation, plus the three dequantization formulas
+  the published SOG spec (developer.playcanvas.com, fetched 2026-09-09)
+  actually states: position log-transform (`Unlog`), scale
+  (`exp(codebook[pixel])`), and SH0 base colour/opacity. **Two things are
+  deliberately not implemented, not guessed at:**
+  - **WebP pixel decoding.** Unity's `ImageConversion.LoadImage` supports only
+    JPEG/PNG, no native WebP. This machine has no `dwebp`/`cwebp`/libwebp/
+    ImageMagick to shell out to either (checked). `ISogTextureDecoder` is the
+    seam a real decoder plugs into; `DefaultSogTextureDecoder` throws with
+    that explanation rather than returning wrong pixels.
+  - **`quats.webp` channel-to-quaternion mapping.** The fetched schema states
+    formulas for means/scales/sh0 but not for quats. `DequantizeQuat` throws
+    `NotImplementedException` naming exactly this gap rather than inventing an
+    encoding.
+  - No `.meta` file was created for the new `.cs` file — Unity generates that
+    on first import in a real Editor; writing one by hand risked a GUID
+    collision I have no way to check for.
+
+### Added later the same date, after Node.js became available
+
+- **`SogFileReader.DequantizeQuat` implemented for real**, superseding the
+  `NotImplementedException` stub above. This machine had no Node.js; a
+  portable Node v24.21.0 LTS was installed into *the notebook's own sandboxed
+  workspace* (not this repository, not the machine that actually builds
+  `VR-URP/`) and used to `npm install @playcanvas/splat-transform` (resolved
+  v3.4.2, commit `0cb47cd`). Running it for real against a synthetic PLY
+  produced a genuine `meta.json` that matches `SogMeta`'s transcribed schema
+  exactly, and its own shipped source
+  (`node_modules/@playcanvas/splat-transform/dist/index.mjs`, function
+  `unpackQuat`) gave the "smallest-three" quaternion decode formula the
+  published spec page didn't state — ported into `DequantizeQuat` with that
+  provenance, not guessed. `PackageVerify.cs` now asserts the result is a
+  unit quaternion across all four `maxComp` branches (still uncompiled,
+  same as everything else in this entry).
+- **ROADMAP item 4 (decimation guidance) has a real, run invocation** for the
+  first time: `splat-transform test_input.ply -d 50% test_output_50.ply -w`
+  against a synthetic 20,000-splat PLY (no real capture exists in this
+  checkout), 20,000 → 10,000 gaussians exactly, file size exactly halved.
+  See `ROADMAP.md` item 4 for the full transcript and the caveat that
+  synthetic-file numbers say nothing about a real capture.
+
+### Investigated, not implemented
+
+- **Single Pass Instanced stereo** (ROADMAP item 1e). Read `RenderGaussianSplats.shader`,
+  `GaussianComposite.shader` and the XR matrix handoff in
+  `GaussianSplatURPFeature.cs` to scope the change: it needs the vertex/compute
+  stages to carry Unity's stereo-instancing macros, `GaussianComposite.shader`'s
+  `Texture2D _GaussianSplatRT` to become a `Texture2DArray` under SPI, and —
+  the part with the most room to get subtly wrong — `CalcViewData` to dispatch
+  per-eye (doubling the view buffer and the `DrawProcedural` instance count,
+  splitting `SV_InstanceID` into eye index and splat index). Given this
+  repository's own history with exactly this class of "looks fixed, is not"
+  VR bug (ROADMAP item 1d), and zero ability to compile or run anything this
+  session, writing that change blind was judged worse than not writing it.
+  Not attempted. Still Multi-pass, still `ROADMAP.md` item 1e's "open
+  measurement, not a known defect."
+- **Author-facing decimation guidance** (ROADMAP item 4). Needs a real
+  `SplatTransform`/`splat-transform` invocation to document honestly — this
+  repository's own rule against inventing one. This machine has no Node.js/npm
+  (`node: command not found`), so no invocation was run. Still nothing to
+  document here.
+
+### Environment finding, not a package fact
+
+The session that wrote this entry could not run the Unity Editor **at all**,
+against any project, in any directory — not a project-specific issue. Batch
+launches failed acquiring the licensing client's IPC mutex
+(`System.IO.IOException` on `Global\Unity.Licensing.Client.Pipe...`), traced
+to the sandboxed tool environment blocking writes to the fixed per-user macOS
+temp directory (`/var/folders/.../T`, read via `confstr()`, not the `$TMPDIR`
+env var) that `.NET`'s named-mutex implementation and `xcrun` both depend on.
+Tested against the real project path and again against a full copy in a
+confirmed-writable directory; same failure both times. No remote compute host
+was available as a fallback (`host.compute.listHosts()` returned empty this
+session). Recorded here because it explains why this entry has no
+`tools/verify/run.sh` result attached, not because it is a fact about the
+package.
+
 ## 0.10.0 — 2026-09-09
 
 ### Added

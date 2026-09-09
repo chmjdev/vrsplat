@@ -321,6 +321,85 @@ namespace VRFlatsCore.Runtime
         // layer stuff
         public List<int2> m_LayerActivationState;
 
+        // ------------------------------------------------------------------
+        // Estate fork: distance-based LOD ladder (ROADMAP item 3).
+        //
+        // UNVERIFIED: written source-only, never compiled or run. This
+        // session had no working Unity process (see CHANGELOG) so nothing
+        // below has been checked beyond reading it.
+        //
+        // Reuses the existing multi-layer asset format rather than adding a
+        // new one: a layer already declared in Initialize()/m_LayerInfo is
+        // treated as one LOD rung by giving it a maximum camera distance.
+        // Author responsibility, not automatic: a capture only behaves as an
+        // LOD ladder if its layers were actually authored as nested detail
+        // levels (as in the CT-scan multi-layer use case this format
+        // originated for) and not as independent content.
+        // ------------------------------------------------------------------
+        [Serializable]
+        public struct LayerLodEntry
+        {
+            public byte layer;
+            /// <summary>Camera distance in metres beyond which this layer is
+            /// deactivated. Zero or negative means "always active" -- the
+            /// base/room layer should normally be set this way so the room
+            /// never fully disappears.</summary>
+            public float maxDistance;
+        }
+
+        [Tooltip("Distance-based LOD: deactivate layers beyond their configured camera distance instead of relying only on the authored m_LayerActivationState. UNVERIFIED -- never compiled or run (see CHANGELOG).")]
+        public bool m_LodEnabled = false;
+        [Tooltip("Per-layer LOD distance in metres. A layer with no entry here, or maxDistance <= 0, is always active regardless of camera distance.")]
+        public List<LayerLodEntry> m_LayerLodDistances = new();
+
+        /// <summary>
+        /// Recomputes which layers should be active for the given camera and,
+        /// only if that set actually changed since the last call, writes it
+        /// into m_LayerActivationState and rebuilds GPU resources.
+        /// UpdateRessources() re-uploads every active layer's bytes, so this
+        /// must not run unconditionally every frame -- only on a real
+        /// transition between LOD rungs.
+        /// </summary>
+        void UpdateLod(Camera cam)
+        {
+            if (!m_LodEnabled || cam == null || m_LayerLodDistances == null || m_LayerLodDistances.Count == 0)
+                return;
+
+            float distance = Vector3.Distance(cam.transform.position, transform.position);
+
+            bool changed = false;
+            var newState = new List<int2>(m_LayerActivationState?.Count ?? m_LayerLodDistances.Count);
+            var authored = m_LayerActivationState ?? new List<int2>();
+            var seenLayers = new HashSet<int>();
+
+            foreach (var lod in m_LayerLodDistances)
+            {
+                seenLayers.Add(lod.layer);
+                bool wantActive = lod.maxDistance <= 0f || distance <= lod.maxDistance;
+                int prevActive = 1;
+                foreach (var kv in authored)
+                {
+                    if (kv.x == lod.layer) { prevActive = kv.y; break; }
+                }
+                int newActive = wantActive ? 1 : 0;
+                if (newActive != prevActive)
+                    changed = true;
+                newState.Add(new int2(lod.layer, newActive));
+            }
+            // Layers with no LOD entry keep their authored activation state unchanged.
+            foreach (var kv in authored)
+            {
+                if (!seenLayers.Contains(kv.x))
+                    newState.Add(kv);
+            }
+
+            if (!changed)
+                return;
+
+            m_LayerActivationState = newState;
+            UpdateRessources();
+        }
+
         int m_SplatCount; // initially same as asset splat count, but editing can change this
         GraphicsBuffer m_GpuSortDistances;
         internal GraphicsBuffer m_GpuSortKeys;
@@ -964,6 +1043,8 @@ namespace VRFlatsCore.Runtime
                 m_PrevHash = curHash;
                 CreateResourcesForAsset();
             }
+
+            UpdateLod(m_centerEyeCamera != null ? m_centerEyeCamera : Camera.main);
             
             if ((m_Sorter == null || m_Sorter.activeType != m_gpuSortType) && splatCount > 0)
             {

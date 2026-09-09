@@ -42,9 +42,16 @@
 > a relative path, which cannot be version-pinned: a consumer takes whatever is
 > in the checkout beside it. `CHANGELOG.md` and the `version` field are what
 > make "which vrflatscore was that built against?" answerable at all.
-> `VR-URP/` in this repository consumes the package the same way, and is pinned
-> to Unity 2022.3.51f1 — not the editor version any of the verification above
-> used. Checked 2026-09-09: **no sibling checkout currently resolves the Unity
+> `VR-URP/` in this repository consumes the package the same way. It was
+> pinned to Unity 2022.3.51f1 (not the editor version any of the verification
+> above used) until 2026-09-09, when `ProjectVersion.txt` and the URP/
+> ShaderGraph pins in `Packages/manifest.json` were retargeted to 6000.3.22f1
+> / 17.3.0 to match — **unverified**: the session that made this change had
+> no working Unity process at all (see `CHANGELOG.md` 0.11.0), could not open
+> the project, and MRTK3 (which `VR-URP/`'s demo scene depends on) documents
+> Unity 2022.3 LTS as its tested ceiling with no confirmed Unity 6 support.
+> Treat this retarget as a diff to open and check, not as a working state.
+> Checked 2026-09-09: **no sibling checkout currently resolves the Unity
 > package**; the sibling that is present consumes the capture tooling under
 > `tools/capture/` instead.
 >
