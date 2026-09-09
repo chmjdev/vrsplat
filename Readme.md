@@ -57,7 +57,9 @@
 >
 > **Upstream remotes were added 2026-09-09**; before that this repository had
 > `origin` only, so no upstream fix would ever have surfaced here.
-> `upstream` (ninjamode) is a true git ancestor — 17 ahead, 0 behind.
+> `upstream` (ninjamode) is a true git ancestor and we are **0 behind** it —
+> nothing upstream is unmerged. (Ahead by this fork's own history: counted 19 on
+> 2026-09-10, and it moves with every commit made here.)
 > `upstream-aras` (aras-p, where fixes actually land now) shares **no history at
 > all**, so porting from it is manual by construction. Remotes do not travel
 > with a clone: **`docs/upstream.md`** carries the two `git remote add` lines,

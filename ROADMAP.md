@@ -141,7 +141,7 @@ right preset for the Quest budget.
    **Still unmeasured:** nothing here renders a frame. That the pass is
    recorded is verified; that it draws correctly on a Quest 3 is not.
 
-2. **SOG / compressed-format import. — SCAFFOLDING ADDED 2026-09-09, UNVERIFIED**
+2. **SOG / compressed-format import. — SCAFFOLDING ADDED 2026-09-09; COMPILES 2026-09-10, still no end-to-end read**
    PlayCanvas' SOG format reports 15–20× smaller than PLY. It is
    web-oriented, so this is real importer work rather than a flag, but the
    size win matters: captures ship inside the APK's StreamingAssets, and
@@ -162,10 +162,16 @@ right preset for the Quest budget.
    a working WebP codec, proven to run this session, so the concrete next
    step is an Editor-only external-process call into it (or an equivalent
    .NET libwebp binding), not an unsolved problem. `ISogTextureDecoder` is
-   the seam. Not wired into `GaussianSplatAssetCreator`'s UI. None of it has
-   been compiled — see `CHANGELOG.md` 0.11.0's environment finding.
+   the seam. Not wired into `GaussianSplatAssetCreator`'s UI.
 
-3. **An LOD ladder. — ADDED 2026-09-09, UNVERIFIED**
+   **Compiled and partly exercised 2026-09-10**, superseding "none of it has
+   been compiled": `SogFileReader` and the `ISogTextureDecoder` seam are in the
+   assembly, every dequantization method is declared, and `DequantizeQuat`
+   returns a unit quaternion on all four `maxComp` branches — the first actual
+   execution of the port. **No `.sog` file has been read end to end**, because
+   WebP decoding is still absent; that is what remains of this item.
+
+3. **An LOD ladder. — ADDED 2026-09-09; COMPILES 2026-09-10, never run**
    So a room can hold detail near the trainee and shed it at distance
    instead of being decimated uniformly. This is what would let a capture be
    larger than the flat budget allows.
@@ -180,8 +186,11 @@ right preset for the Quest budget.
    `m_LayerLodDistances`) is a distance-based ladder in the general spirit
    this item's own opening line describes, reusing the existing multi-layer
    asset format (one layer = one LOD rung, given a max camera distance) —
-   not a reproduction of any specific external method. Uncompiled; see
-   `CHANGELOG.md` 0.11.0.
+   not a reproduction of any specific external method.
+
+   **Compiles as of 2026-09-10** — the three symbols are in the assembly,
+   checked by reflection. It has still **never been run**, against a real
+   capture or otherwise, so whether the ladder behaves is untested.
 
 4. **Author-facing decimation guidance. — REAL INVOCATION RUN 2026-09-09**
    `SplatTransform` (converts formats, emits LOD) is the practical tool for

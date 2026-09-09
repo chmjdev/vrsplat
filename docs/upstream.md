@@ -23,7 +23,7 @@ is for.
 
 | Remote | Repository | Relationship to this fork |
 | --- | --- | --- |
-| `upstream` | `ninjamode/Unity-VR-Gaussian-Splatting` | **A true git ancestor.** `upstream/main` is an ancestor of our `HEAD`: we are **17 commits ahead, 0 behind**. A merge from it is a real merge |
+| `upstream` | `ninjamode/Unity-VR-Gaussian-Splatting` | **A true git ancestor.** `upstream/main` is an ancestor of our `HEAD`, and we are **0 behind** — nothing upstream is unmerged. A merge from it would be a real merge. (Ahead by this fork's own history; counted 19 on 2026-09-10, and it moves with every commit here, so re-count rather than quoting this) |
 | `upstream-aras` | `aras-p/UnityGaussianSplatting` | **No shared history at all.** `git merge-base HEAD upstream-aras/main` exits 1 — there is no common ancestor. ninjamode copied the code rather than forking the repository |
 
 **That second row is the important one.** "Pull the fix from aras-p" cannot be a

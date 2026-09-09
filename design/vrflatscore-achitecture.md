@@ -132,7 +132,8 @@ that built against?" is at least answerable.
 
 **8.3 — divergence from upstream was manual and untracked. — CLOSED
 2026-09-09.** Both remotes added, and the relationship measured rather than
-assumed: `upstream` (ninjamode) is a true git ancestor, **17 ahead, 0 behind**;
+assumed: `upstream` (ninjamode) is a true git ancestor and we are **0 behind** it
+(ahead by this fork's own history — 17 when this was written, 19 on 2026-09-10);
 `upstream-aras` (aras-p, where fixes actually land) shares **no history at all**
 — `git merge-base` exits 1 — so porting from it can never be a merge. The
 procedure, the rename map, and what a careless port would erase are in

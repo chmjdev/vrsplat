@@ -127,11 +127,20 @@ public static class PackageVerify
             var dequantizeQuat = sogType.GetMethod("DequantizeQuat", BindingFlags.Public | BindingFlags.Static);
             if (dequantizeQuat != null)
             {
-                for (byte tag = 252; tag <= 255; tag++)
+                // The loop counter is an INT, cast to byte at the call. Written
+                // as `for (byte tag = 252; tag <= 255; tag++)` it never
+                // terminates: a byte cannot exceed 255, so the condition is
+                // always true and the counter wraps to 0 and goes round again.
+                // Measured 2026-09-10 before the fix -- the run spun for 22
+                // minutes, logged 12.5 million failing iterations and grew
+                // verify.log to 11.4 GB, still climbing at ~5 MB/s, with no
+                // VERIFY line ever printed. A harness that cannot finish is
+                // worse than one that fails.
+                for (int tag = 252; tag <= 255; tag++)
                 {
                     try
                     {
-                        var q = (UnityEngine.Quaternion)dequantizeQuat.Invoke(null, new object[] { (byte)37, (byte)200, (byte)90, tag });
+                        var q = (UnityEngine.Quaternion)dequantizeQuat.Invoke(null, new object[] { (byte)37, (byte)200, (byte)90, (byte)tag });
                         float mag = Mathf.Sqrt(q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w);
                         Check($"DequantizeQuat(tag={tag}) returns a unit quaternion",
                               Mathf.Abs(mag - 1f) < 0.001f,
