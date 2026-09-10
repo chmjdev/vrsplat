@@ -40,10 +40,16 @@ revisiting once the manual pipeline has actually produced a room.
 
 ## The steps
 
-    frames  →  COLMAP poses  →  LichtFeld training  →  room.ply  →  Unity asset  →  captures/<sceneId>/
+    scan  →  frames  →  COLMAP poses  →  LichtFeld training  →  room.ply  →  Unity asset  →  captures/<sceneId>/
 
-1. **Shoot.** Walk the room slowly, overlapping generously, several heights.
-   Avoid motion blur — blurry frames poison pose estimation.
+1. **Shoot — now has a tool.** `unity/RoomScanner.cs` captures posed frames
+   from the Quest's own passthrough cameras; `pull-scan.sh` brings them home
+   in the shape step 2 wants. See [Scanning on the headset](#scanning-on-the-headset).
+   Any camera still works — the rest of this pipeline only needs a directory
+   of overlapping JPEGs — but the headset is the one you are already wearing.
+
+   However you shoot: walk the room slowly, overlap generously, cover several
+   heights, and avoid motion blur. Blurry frames poison pose estimation.
 2. **Poses.** COLMAP (on the same remote box). LichtFeld trains *from a
    COLMAP dataset*, so this step is required, not optional.
 3. **Train.** LichtFeld Studio, headless, on the remote GPU.
@@ -54,6 +60,54 @@ revisiting once the manual pipeline has actually produced a room.
 6. **Place and align.** Drop into
    `unityvrlabs/Assets/StreamingAssets/captures/<sceneId>/` with a
    `capture.json`. Alignment always needs work — see that folder's README.
+
+
+## Scanning on the headset
+
+`unity/RoomScanner.cs` is a drop-in MonoBehaviour, deliberately **not** part of
+the `package/` — this is capture tooling, and the rendering package stays a
+rendering package with no camera permissions in it.
+
+    right trigger  →  start scan
+    right trigger  →  stop scan
+
+Frames are written at 3 fps to the app's own `persistentDataPath`, alongside
+`poses.jsonl` (one head pose per frame) and a `scan.json` manifest written
+last, so its presence means the scan finished cleanly.
+
+Then:
+
+    ./pull-scan.sh --list                    # what is on the headset
+    ./pull-scan.sh                           # newest scan
+    ./pull-scan.sh scan-20260910-021500      # a specific one
+
+It reports the frame count and warns below 40 frames, which is the usual
+reason a reconstruction fails — slowly, remotely, and after you have paid for
+the GPU time.
+
+### What it needs, and what it deliberately does not use
+
+| Requirement | Why |
+| :---------- | :-- |
+| Horizon OS **v74+**, Quest **3 / 3S** | Passthrough Camera Access exists nowhere else. Quest Pro and earlier are out |
+| **Passthrough feature enabled** | PCA is gated on it |
+| `horizonos.permission.HEADSET_CAMERA` | Passthrough cameras only. `android.permission.CAMERA` would also grant the avatar camera, which this has no business touching |
+| `com.unity.modules.audio` | **Not a typo.** `WebCamTexture` is forwarded to `UnityEngine.AudioModule`; without it the file fails to compile with `CS1069` |
+| A physical headset | PCA does not work in XR Simulator |
+
+**It uses `WebCamTexture`, not Meta's `PassthroughCameraAccess`.** The current
+Meta component ships in MRUK v81+, which is Meta XR SDK; this repository is an
+MIT package on pure Unity OpenXR and the licence boundary above exists to keep
+vendor code out of the compiler. The component Meta replaced was itself a
+wrapper around stock `WebCamTexture`, so the SDK-free path is to use it
+directly.
+
+**What that costs:** no camera intrinsics or extrinsics from the API. It does
+not block this pipeline, because `remote-train.sh` runs
+`colmap automatic_reconstructor`, which solves intrinsics from the images. The
+head poses in `poses.jsonl` are recorded for later metric-scale and gravity
+alignment — as **priors, never as fixed truth**, which is the same stance the
+suite's posed-capture work already takes.
 
 ## Budget
 
@@ -70,6 +124,19 @@ committed.
     VRFLATSCORE_REMOTE_HOST     user@host of the GPU box
     VRFLATSCORE_REMOTE_KEY      ssh key path            (optional)
     VRFLATSCORE_REMOTE_WORKDIR  remote scratch dir      (default ~/vrflatscore-work)
+    VRFLATSCORE_CAPTURE_DIR     where room.ply lands    (default <repo>/captures)
+    VRFLATSCORE_SCAN_DIR        where pulled scans land (default ~/vrflatscore-scans)
+    VRFLATSCORE_SCAN_PACKAGE    scanning app's package  (default com.binteca.vrflatscore.demo)
+    VRFLATSCORE_DEVICE          adb serial              (optional, for >1 headset)
+    VRFLATSCORE_ADB             adb binary              (optional)
+
+**`VRFLATSCORE_CAPTURE_DIR` replaced a hardcoded sibling path.** Until
+2026-09-10 `remote-train.sh` wrote its result into
+`unityvrlabs/Assets/StreamingAssets/captures/`, a project that is not present
+beside this one — so the final step of a paid remote training run landed in a
+directory that did not exist. The default is now a `captures/` directory inside
+this repository, which always does. Point the variable at a consuming
+project's StreamingAssets when there is one.
 
 The GPU box is **rented, ephemeral compute — not estate infrastructure**.
 It gets no `jcds.config` entry and no DNS name; JCDS supervises services,

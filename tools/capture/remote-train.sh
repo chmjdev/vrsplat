@@ -29,10 +29,19 @@ SSH_OPTS=()
 #   VRFLATSCORE_TRAIN_CMD='lichtfeld-studio --headless --data {DATA} --output {OUT}'
 TRAIN_CMD="${VRFLATSCORE_TRAIN_CMD:-lichtfeld-studio --headless --data {DATA} --output {OUT}}"
 
-# Where the finished capture belongs — exactly what CapturedRoomLoader
-# already reads, so the pipeline ends where the runtime begins.
-SUITE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-DEST="$SUITE_ROOT/unityvrlabs/Assets/StreamingAssets/captures/$SCENE_ID"
+# Where the finished capture lands.
+#
+# This used to hardcode a sibling project's StreamingAssets path
+# (unityvrlabs/Assets/StreamingAssets/captures/). Checked 2026-09-10: that
+# project is not present beside this one, so the script's last step wrote into
+# a directory that did not exist and could not be consumed by anything —
+# discovered only after a full remote training run had already been paid for.
+#
+# Default is now a directory inside THIS repository's own captures root, which
+# always exists. Point VRFLATSCORE_CAPTURE_DIR at a consuming project's
+# StreamingAssets when there is one.
+CAPTURE_ROOT="${VRFLATSCORE_CAPTURE_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/captures}"
+DEST="$CAPTURE_ROOT/$SCENE_ID"
 
 echo "=== 1/4  uploading frames -> $VRFLATSCORE_REMOTE_HOST ==="
 # Frames stay remote; only the reconstruction travels back.

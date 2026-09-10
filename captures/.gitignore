@@ -1,0 +1,5 @@
+# Reconstructions are large binary outputs, regenerable from frames by
+# remote-train.sh. The directory is tracked so the pipeline always has a
+# destination that exists; its contents are not.
+*
+!.gitignore
