@@ -63,6 +63,7 @@ public class RoomScanner : MonoBehaviour
     float m_NextCapture;
     bool m_Scanning, m_PrevTrigger, m_PermissionAsked;
 
+    public string Status { get; private set; } = "idle";
     public bool IsScanning => m_Scanning;
     public int FrameCount => m_FrameIndex;
     public string ScanDirectory => m_ScanDir;
@@ -81,6 +82,7 @@ public class RoomScanner : MonoBehaviour
             Debug.Log("[roomscan] requesting " + kCameraPermission);
         }
 #endif
+        Status = "ready - right trigger to scan";
         Debug.Log("[roomscan] ready - pull the RIGHT trigger to start/stop a scan");
     }
 
@@ -132,6 +134,7 @@ public class RoomScanner : MonoBehaviour
         m_FrameIndex = 0;
         m_NextCapture = 0f;
         m_Scanning = true;
+        Status = $"SCANNING {sceneId}";
         Debug.Log($"[roomscan] START {sceneId} -> {m_ScanDir} ({m_Cam.width}x{m_Cam.height} @ {m_Fps}fps)");
     }
 
@@ -142,6 +145,7 @@ public class RoomScanner : MonoBehaviour
         var devices = WebCamTexture.devices;
         if (devices == null || devices.Length == 0)
         {
+            Status = "NO CAMERA - passthrough off, permission refused, or OS < v74";
             Debug.LogError("[roomscan] no camera devices. On Quest this means the Passthrough " +
                            "feature is off, the permission was refused, or the OS is below v74.");
             return false;
@@ -183,6 +187,7 @@ public class RoomScanner : MonoBehaviour
             name, Time.realtimeSinceStartup, p.x, p.y, p.z, q.x, q.y, q.z, q.w));
 
         m_FrameIndex++;
+        Status = $"SCANNING - {m_FrameIndex} frames";
         if (m_FrameIndex % 25 == 0) Debug.Log($"[roomscan] {m_FrameIndex} frames");
         if (m_MaxFrames > 0 && m_FrameIndex >= m_MaxFrames) StopScan("frame limit");
     }
@@ -211,6 +216,7 @@ public class RoomScanner : MonoBehaviour
         manifest.AppendLine("}");
         File.WriteAllText(Path.Combine(m_ScanDir, "scan.json"), manifest.ToString());
 
+        Status = $"saved {m_FrameIndex} frames ({why})";
         Debug.Log($"[roomscan] STOP ({why}) - {m_FrameIndex} frames in {m_ScanDir}");
     }
 
